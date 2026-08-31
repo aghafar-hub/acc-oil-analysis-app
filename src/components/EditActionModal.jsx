@@ -1,25 +1,45 @@
 import { useState } from "react";
 import { s, T } from "../theme";
-import { nextAcNo } from "../parsers";
+import { nextAcNo, formatDate } from "../parsers";
 
 const STATUS_OPTIONS = ["Open", "In Progress", "Closed", "Waiting Stoppage"];
+const CONTRACTOR_OPTIONS = ["RHI", "ASEC"];
 
-export default function EditActionModal({ action, isNew, allActions, equipmentOptions, onClose, onSave, onDelete, saving }) {
+export default function EditActionModal({ action, isNew, allActions, oilChanges, equipmentOptions, onClose, onSave, onDelete, saving }) {
   const [form, setForm] = useState(() => ({ ...action }));
+  const [lubPointId, setLubPointId] = useState(null);
 
   function set(field, value) {
     setForm((f) => ({ ...f, [field]: value }));
   }
 
+  const equipCode = form.equipmentCode || form.unitId || "";
+  const oilChangesForEquip = (oilChanges || []).filter((o) => o.equipmentCode === equipCode);
+
   function handleSave() {
     const acNo = isNew ? nextAcNo(allActions || []) : form.acNo;
-    onSave({
+    const payload = {
       ...form,
       acNo,
-      equipmentCode: form.equipmentCode || form.unitId,
+      equipmentCode: equipCode,
       _matchCols: isNew ? undefined : form._matchCols || [0, 1],
-      _matchValues: isNew ? undefined : form._matchValues || [form.acNo, form.equipmentCode || form.unitId],
-    });
+      _matchValues: isNew ? undefined : form._matchValues || [form.acNo, equipCode],
+    };
+
+    // Mirrors the original app: recording a Last Change date on an action
+    // also updates that equipment's Oil Change Log row. If Last Change is
+    // left blank but a linked oil-change record exists, inherit its date
+    // instead of writing anything new.
+    if (oilChangesForEquip.length > 0) {
+      const target = oilChangesForEquip.length === 1 ? oilChangesForEquip[0] : oilChangesForEquip.find((o) => o._id === lubPointId);
+      if (form.lastChange && target) {
+        payload._oilChangeTarget = target;
+      } else if (!form.lastChange && target) {
+        payload.lastChange = formatDate(target.changeDate);
+      }
+    }
+
+    onSave(payload);
   }
 
   const field = (label, key, type = "text") => (
@@ -28,6 +48,19 @@ export default function EditActionModal({ action, isNew, allActions, equipmentOp
       <input style={{ ...s.input, fontSize: 13 }} type={type} value={form[key] || ""} onChange={(e) => set(key, e.target.value)} />
     </div>
   );
+
+  const textarea = (label, key) => (
+    <div>
+      <label style={{ ...s.label, fontSize: 11 }}>{label}</label>
+      <textarea
+        style={{ ...s.input, fontSize: 13, minHeight: 56, resize: "vertical" }}
+        value={form[key] || ""}
+        onChange={(e) => set(key, e.target.value)}
+      />
+    </div>
+  );
+
+  const isClosed = (form.status || "Open") === "Closed";
 
   return (
     <div
@@ -85,7 +118,7 @@ export default function EditActionModal({ action, isNew, allActions, equipmentOp
             <label style={{ ...s.label, fontSize: 11 }}>Equipment Code</label>
             <select
               style={{ ...s.input, fontSize: 13, cursor: "pointer" }}
-              value={form.equipmentCode || form.unitId || ""}
+              value={equipCode}
               onChange={(e) => set("equipmentCode", e.target.value)}
             >
               <option value="">Select equipment…</option>
@@ -103,6 +136,54 @@ export default function EditActionModal({ action, isNew, allActions, equipmentOp
           {field("Sample Result", "sampleResult")}
         </div>
 
+        <p style={{ fontSize: 12, fontWeight: 700, color: T.accent, margin: "0 0 10px" }}>Oil Change</p>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(160px,1fr))", gap: 12, marginBottom: 18 }}>
+          <div>
+            {field("Last Change Date", "lastChange", "date")}
+            <p style={{ fontSize: 10, color: T.textMuted, margin: "3px 0 0", lineHeight: 1.5 }}>
+              {form.lastChange
+                ? "Will also update this equipment's Oil Change Log entry."
+                : oilChangesForEquip.length > 0
+                  ? "Leave blank to inherit from Oil Change Log."
+                  : "No oil change data for this equipment."}
+            </p>
+          </div>
+          {form.lastChange && oilChangesForEquip.length > 1 && (
+            <div>
+              <label style={{ ...s.label, fontSize: 11 }}>Update Lubrication Point</label>
+              <select
+                style={{ ...s.input, fontSize: 13, cursor: "pointer" }}
+                value={lubPointId || ""}
+                onChange={(e) => setLubPointId(e.target.value)}
+              >
+                <option value="">— Select point —</option>
+                {oilChangesForEquip.map((o) => (
+                  <option key={o._id} value={o._id}>
+                    {o.lubricationPoint} — {o.oilType}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+          {form.lastChange && oilChangesForEquip.length === 1 && (
+            <div>
+              <label style={{ ...s.label, fontSize: 11 }}>Lubrication Point</label>
+              <div
+                style={{
+                  ...s.input,
+                  background: T.cardSubBg,
+                  color: T.textSecondary,
+                  display: "flex",
+                  alignItems: "center",
+                  minHeight: 34,
+                }}
+              >
+                {oilChangesForEquip[0].lubricationPoint} — {oilChangesForEquip[0].oilType}
+              </div>
+            </div>
+          )}
+        </div>
+
         <p style={{ fontSize: 12, fontWeight: 700, color: T.accent, margin: "0 0 10px" }}>Status &amp; Action</p>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(160px,1fr))", gap: 12, marginBottom: 18 }}>
           <div>
@@ -117,21 +198,39 @@ export default function EditActionModal({ action, isNew, allActions, equipmentOp
               ))}
             </select>
           </div>
-          {field("Completed Date", "completedDate", "date")}
-          {field("Contractor", "contractor")}
-          {field("Contractor Action", "contractorAction")}
+          <div>
+            <label style={{ ...s.label, fontSize: 11 }}>Completed Date</label>
+            <input
+              style={{ ...s.input, fontSize: 13, opacity: isClosed ? 1 : 0.4, cursor: isClosed ? "auto" : "not-allowed" }}
+              type="date"
+              disabled={!isClosed}
+              value={form.completedDate || ""}
+              onChange={(e) => set("completedDate", e.target.value)}
+            />
+            {!isClosed && <p style={{ fontSize: 10, color: T.textMuted, margin: "3px 0 0" }}>Available when status is Closed</p>}
+          </div>
+          <div>
+            <label style={{ ...s.label, fontSize: 11 }}>Contractor</label>
+            <select
+              style={{ ...s.input, fontSize: 13, cursor: "pointer" }}
+              value={form.contractor || ""}
+              onChange={(e) => set("contractor", e.target.value)}
+            >
+              <option value="">—</option>
+              {CONTRACTOR_OPTIONS.map((c) => (
+                <option key={c}>{c}</option>
+              ))}
+            </select>
+          </div>
         </div>
-        <div style={{ marginBottom: 18 }}>
-          <label style={{ ...s.label, fontSize: 11 }}>Agreed Action</label>
-          <textarea
-            style={{ ...s.input, fontSize: 13, minHeight: 60, resize: "vertical" }}
-            value={form.agreedAction || ""}
-            onChange={(e) => set("agreedAction", e.target.value)}
-          />
-        </div>
+
+        <p style={{ fontSize: 12, fontWeight: 700, color: T.accent, margin: "0 0 10px" }}>Analysis &amp; Actions</p>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 22 }}>
-          {field("Prev Month Agreed Action", "prevMonthAgreedAction")}
-          {field("Acc Action", "accAction")}
+          {textarea("Sample Analysis", "sampleAnalysis")}
+          {textarea("Contractor Action", "contractorAction")}
+          {textarea("Prev. Month Agreed Action", "prevMonthAgreedAction")}
+          {textarea("ACC Action", "accAction")}
+          {textarea("Agreed Action", "agreedAction")}
         </div>
 
         <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>

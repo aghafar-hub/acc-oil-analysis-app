@@ -12,7 +12,7 @@ const STATUS_COLOR = { Open: T.danger, "In Progress": T.warning, Closed: T.succe
 // App's lifted state). An edit made on either page updates the one shared
 // list, so both pages reflect it immediately — that shared wiring, plus the
 // verified writes in api.js, is what actually fixes the original sync bug.
-export default function ActionTracker({ actions, equipmentOptions, onAddAction, onUpdateAction, onDeleteAction }) {
+export default function ActionTracker({ actions, oilChanges, equipmentOptions, onAddAction, onUpdateAction, onDeleteAction }) {
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
   const [expanded, setExpanded] = useState({});
@@ -167,6 +167,7 @@ export default function ActionTracker({ actions, equipmentOptions, onAddAction, 
           action={editing.action}
           isNew={editing.isNew}
           allActions={actions}
+          oilChanges={oilChanges}
           equipmentOptions={equipmentOptions}
           saving={saving}
           onClose={() => !saving && setEditing(null)}

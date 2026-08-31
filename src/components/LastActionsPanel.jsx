@@ -18,7 +18,17 @@ const RESULT_COLOR = {
 // consumers pass the SAME `actions` array and the SAME onAdd/onUpdate/onDelete
 // callbacks (lifted to App), so an edit made here is immediately visible on
 // the other page too — no separate copies of the data to fall out of sync.
-export default function LastActionsPanel({ equipmentCode, actions, onAdd, onUpdate, onDelete, title, limit, equipmentOptions }) {
+export default function LastActionsPanel({
+  equipmentCode,
+  actions,
+  oilChanges,
+  onAdd,
+  onUpdate,
+  onDelete,
+  title,
+  limit,
+  equipmentOptions,
+}) {
   const [viewing, setViewing] = useState(null);
   const [editing, setEditing] = useState(null); // { action, isNew }
   const [saving, setSaving] = useState(false);
@@ -183,12 +193,17 @@ export default function LastActionsPanel({ equipmentCode, actions, onAdd, onUpda
             </div>
             {[
               ["Status", viewing.status],
+              ["Oil Type", viewing.oilType],
               ["Revision Date", formatDate(viewing.revisionDate)],
               ["Sample Date", formatDate(viewing.sampleDate)],
               ["Sample Result", viewing.sampleResult],
+              ["Sample Analysis", viewing.sampleAnalysis],
+              ["Last Change", formatDate(viewing.lastChange)],
               ["Agreed Action", viewing.agreedAction],
               ["Contractor", viewing.contractor],
               ["Contractor Action", viewing.contractorAction],
+              ["Prev. Month Agreed Action", viewing.prevMonthAgreedAction],
+              ["ACC Action", viewing.accAction],
               ["Completed Date", formatDate(viewing.completedDate)],
             ].map(([label, value]) => (
               <div
@@ -220,6 +235,7 @@ export default function LastActionsPanel({ equipmentCode, actions, onAdd, onUpda
           action={editing.action}
           isNew={editing.isNew}
           allActions={actions}
+          oilChanges={oilChanges}
           equipmentOptions={equipmentOptions}
           saving={saving}
           onClose={() => !saving && setEditing(null)}

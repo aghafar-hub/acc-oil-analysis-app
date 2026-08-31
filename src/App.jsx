@@ -81,6 +81,29 @@ export default function App() {
   // Local state is only updated AFTER the server confirms the write — unlike
   // the original app, which updated the screen optimistically and could
   // silently drift from what was actually saved.
+  //
+  // Recording a Last Change date on an action also updates that equipment's
+  // Oil Change Log entry (mirroring the original app). EditActionModal
+  // computes `_oilChangeTarget` (the specific oil-change row + its match
+  // key) when the user sets Last Change; this applies that second write
+  // after the action itself is confirmed saved.
+  const applyOilChangeSideEffect = useCallback(
+    async (action) => {
+      if (!action._oilChangeTarget) return;
+      try {
+        const saved = await api.saveOilChange(config.webhookUrl, { ...action._oilChangeTarget, changeDate: action.lastChange });
+        setOilChanges((prev) => {
+          const next = prev.map((o) => (o._id === action._oilChangeTarget._id ? saved : o));
+          writeCache("oilChanges", next);
+          return next;
+        });
+      } catch (err) {
+        pushToast(`Action saved, but the linked Oil Change Log entry wasn't: ${err.message}`, "error");
+      }
+    },
+    [config.webhookUrl, pushToast]
+  );
+
   const onAddAction = useCallback(
     async (action) => {
       try {
@@ -91,12 +114,13 @@ export default function App() {
           return next;
         });
         pushToast("Action added.", "success");
+        await applyOilChangeSideEffect(action);
       } catch (err) {
         pushToast(err.message, "error");
         throw err;
       }
     },
-    [config.webhookUrl, pushToast]
+    [config.webhookUrl, pushToast, applyOilChangeSideEffect]
   );
 
   const onUpdateAction = useCallback(
@@ -111,12 +135,13 @@ export default function App() {
           return next;
         });
         pushToast("Action saved.", "success");
+        await applyOilChangeSideEffect(action);
       } catch (err) {
         pushToast(err.message, "error");
         throw err;
       }
     },
-    [config.webhookUrl, pushToast]
+    [config.webhookUrl, pushToast, applyOilChangeSideEffect]
   );
 
   const onDeleteAction = useCallback(

@@ -210,6 +210,7 @@ export default function OilAnalysisReport({
       <LastActionsPanel
         equipmentCode={sample.unitId}
         actions={actions}
+        oilChanges={oilChanges}
         onAdd={onAddAction}
         onUpdate={onUpdateAction}
         onDelete={onDeleteAction}

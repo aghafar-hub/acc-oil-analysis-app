@@ -99,9 +99,21 @@ Google Sheets or somewhere else.
 
 ### `EditActionModal.jsx`
 
-The add/edit form for a single action row. Local form state only; calls
-`onSave(formValues)` when the user clicks Save, and lets the parent decide
-what "save" means (add vs. update) and how to handle failure.
+The add/edit form for a single action row — all 16 real Action Tracker
+fields, verified field-by-field against both the live sheet and the
+original app's edit form (see `docs/SHEET_SCHEMA.md`'s Action Tracker
+section). Local form state only; calls `onSave(formValues)` when the user
+clicks Save, and lets the parent decide what "save" means (add vs. update)
+and how to handle failure.
+
+One field has a cross-sheet side effect: setting **Last Change** here also
+computes an `_oilChangeTarget` (the matching Oil Change Log row for that
+equipment, disambiguated by a lubrication-point picker if the equipment has
+more than one) and attaches it to the saved payload. `App.jsx`'s
+`applyOilChangeSideEffect` then pushes a second, separately-verified write
+to update that row's `changeDate` after the action itself is confirmed
+saved. Leaving Last Change blank instead inherits the existing Oil Change
+Log date onto the action, rather than writing anything.
 
 ### `ErrorBoundary.jsx`
 
