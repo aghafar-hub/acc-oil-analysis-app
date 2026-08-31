@@ -32,7 +32,9 @@ export default function ActionTracker({ actions, equipmentOptions, onAddAction, 
     }));
     if (query) {
       const q = query.toLowerCase();
-      groups = groups.filter((g) => g.code.toLowerCase().includes(q) || g.list.some((a) => (a.agreedAction || "").toLowerCase().includes(q)));
+      groups = groups.filter(
+        (g) => g.code.toLowerCase().includes(q) || g.list.some((a) => (a.agreedAction || "").toLowerCase().includes(q))
+      );
     }
     if (statusFilter !== "All") {
       groups = groups.filter((g) => g.list[0]?.status === statusFilter);
@@ -75,23 +77,46 @@ export default function ActionTracker({ actions, equipmentOptions, onAddAction, 
       </div>
 
       <div style={{ display: "flex", gap: 12, marginBottom: 14 }}>
-        <input style={{ ...s.input, maxWidth: 320 }} placeholder="Search equipment or action…" value={query} onChange={(e) => setQuery(e.target.value)} />
+        <input
+          style={{ ...s.input, maxWidth: 320 }}
+          placeholder="Search equipment or action…"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+        />
         <select style={{ ...s.input, maxWidth: 200 }} value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
-          {["All", "Open", "In Progress", "Closed", "Waiting Stoppage"].map((o) => <option key={o}>{o}</option>)}
+          {["All", "Open", "In Progress", "Closed", "Waiting Stoppage"].map((o) => (
+            <option key={o}>{o}</option>
+          ))}
         </select>
       </div>
-      <div style={{ fontSize: 12, color: T.textSecondary, marginBottom: 10 }}>{grouped.length} equipment · showing latest action per equipment · tap to expand</div>
+      <div style={{ fontSize: 12, color: T.textSecondary, marginBottom: 10 }}>
+        {grouped.length} equipment · showing latest action per equipment · tap to expand
+      </div>
 
       {grouped.map((g) => {
         const latest = g.list[0];
         const isOpen = expanded[g.code];
         return (
           <div key={g.code} style={{ ...s.card, borderLeft: `3px solid ${STATUS_COLOR[latest.status] || T.border}` }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer" }} onClick={() => setExpanded((e) => ({ ...e, [g.code]: !e[g.code] }))}>
+            <div
+              style={{ display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer" }}
+              onClick={() => setExpanded((e) => ({ ...e, [g.code]: !e[g.code] }))}
+            >
               <div>
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                   <strong>{g.code}</strong>
-                  <span style={{ background: (STATUS_COLOR[latest.status] || T.textSecondary) + "22", color: STATUS_COLOR[latest.status] || T.textSecondary, borderRadius: 4, padding: "2px 8px", fontSize: 11, fontWeight: 700 }}>{latest.status || "—"}</span>
+                  <span
+                    style={{
+                      background: (STATUS_COLOR[latest.status] || T.textSecondary) + "22",
+                      color: STATUS_COLOR[latest.status] || T.textSecondary,
+                      borderRadius: 4,
+                      padding: "2px 8px",
+                      fontSize: 11,
+                      fontWeight: 700,
+                    }}
+                  >
+                    {latest.status || "—"}
+                  </span>
                 </div>
                 <div style={{ fontSize: 13, marginTop: 4 }}>{latest.agreedAction || "—"}</div>
                 <div style={{ fontSize: 12, color: T.textSecondary, marginTop: 2 }}>{latest.description}</div>
@@ -105,18 +130,28 @@ export default function ActionTracker({ actions, equipmentOptions, onAddAction, 
             {isOpen && (
               <table style={{ ...s.table, fontSize: 12, marginTop: 14 }}>
                 <thead>
-                  <tr>{["Ac.No", "Revision Date", "Status", "Agreed Action", "Completed Date", ""].map((h) => <th key={h} style={s.th}>{h}</th>)}</tr>
+                  <tr>
+                    {["Ac.No", "Revision Date", "Status", "Agreed Action", "Completed Date", ""].map((h) => (
+                      <th key={h} style={s.th}>
+                        {h}
+                      </th>
+                    ))}
+                  </tr>
                 </thead>
                 <tbody>
                   {g.list.map((a) => (
                     <tr key={a._id}>
                       <td style={{ ...s.td, fontFamily: "monospace" }}>{a.acNo}</td>
                       <td style={s.td}>{formatDate(a.revisionDate)}</td>
-                      <td style={s.td}><span style={{ color: STATUS_COLOR[a.status] || T.textSecondary }}>{a.status}</span></td>
+                      <td style={s.td}>
+                        <span style={{ color: STATUS_COLOR[a.status] || T.textSecondary }}>{a.status}</span>
+                      </td>
                       <td style={s.td}>{a.agreedAction || "—"}</td>
                       <td style={s.td}>{formatDate(a.completedDate)}</td>
                       <td style={s.td}>
-                        <button style={{ ...s.btn, padding: "3px 7px" }} onClick={() => setEditing({ action: a, isNew: false })}><i className="ti ti-edit" aria-hidden="true" /></button>
+                        <button style={{ ...s.btn, padding: "3px 7px" }} onClick={() => setEditing({ action: a, isNew: false })}>
+                          <i className="ti ti-edit" aria-hidden="true" />
+                        </button>
                       </td>
                     </tr>
                   ))}

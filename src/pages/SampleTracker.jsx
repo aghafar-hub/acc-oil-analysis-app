@@ -26,7 +26,11 @@ export default function SampleTracker({ samples }) {
           <div style={{ fontWeight: 700, marginBottom: 10 }}>{g.code}</div>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             {g.list.map((sample, i) => (
-              <div key={sample._id || i} style={{ ...s.badge(sample.reportStatus), padding: "6px 10px" }} title={formatDate(sample.sampledDate)}>
+              <div
+                key={sample._id || i}
+                style={{ ...s.badge(sample.reportStatus), padding: "6px 10px" }}
+                title={formatDate(sample.sampledDate)}
+              >
                 {formatDate(sample.sampledDate)}
               </div>
             ))}

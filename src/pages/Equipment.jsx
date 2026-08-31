@@ -42,7 +42,9 @@ export default function Equipment({ samples, actions, onOpenReport }) {
             <thead>
               <tr>
                 {["Equipment Code", "Description", "Last Sample", "Status", "Open Actions", ""].map((h) => (
-                  <th key={h} style={s.th}>{h}</th>
+                  <th key={h} style={s.th}>
+                    {h}
+                  </th>
                 ))}
               </tr>
             </thead>
@@ -52,10 +54,14 @@ export default function Equipment({ samples, actions, onOpenReport }) {
                   <td style={{ ...s.td, fontFamily: "monospace" }}>{r.unitId}</td>
                   <td style={s.td}>{r.description || "—"}</td>
                   <td style={s.td}>{formatDate(r.sampledDate)}</td>
-                  <td style={s.td}><span style={s.badge(r.reportStatus)}>{r.reportStatus}</span></td>
+                  <td style={s.td}>
+                    <span style={s.badge(r.reportStatus)}>{r.reportStatus}</span>
+                  </td>
                   <td style={s.td}>{r.openActions > 0 ? <span style={s.badge("Alert")}>{r.openActions}</span> : "—"}</td>
                   <td style={s.td}>
-                    <button style={{ ...s.btn, padding: "3px 10px", fontSize: 12 }} onClick={() => onOpenReport(r)}>Open Report</button>
+                    <button style={{ ...s.btn, padding: "3px 10px", fontSize: 12 }} onClick={() => onOpenReport(r)}>
+                      Open Report
+                    </button>
                   </td>
                 </tr>
               ))}

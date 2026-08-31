@@ -75,81 +75,98 @@ export default function App() {
   // Local state is only updated AFTER the server confirms the write — unlike
   // the original app, which updated the screen optimistically and could
   // silently drift from what was actually saved.
-  const onAddAction = useCallback(async (action) => {
-    try {
-      const saved = await api.saveAction(config.webhookUrl, action, { isNew: true });
-      setActions((prev) => {
-        const next = [...prev, saved];
-        writeCache("actions", next);
-        return next;
-      });
-      pushToast("Action added.", "success");
-    } catch (err) {
-      pushToast(err.message, "error");
-      throw err;
-    }
-  }, [config.webhookUrl, pushToast]);
+  const onAddAction = useCallback(
+    async (action) => {
+      try {
+        const saved = await api.saveAction(config.webhookUrl, action, { isNew: true });
+        setActions((prev) => {
+          const next = [...prev, saved];
+          writeCache("actions", next);
+          return next;
+        });
+        pushToast("Action added.", "success");
+      } catch (err) {
+        pushToast(err.message, "error");
+        throw err;
+      }
+    },
+    [config.webhookUrl, pushToast]
+  );
 
-  const onUpdateAction = useCallback(async (action) => {
-    try {
-      const saved = await api.saveAction(config.webhookUrl, action, { isNew: false });
-      setActions((prev) => {
-        const next = prev.map((a) => (a._matchValues?.[0] === action._matchValues?.[0] && a._matchValues?.[1] === action._matchValues?.[1] ? saved : a));
-        writeCache("actions", next);
-        return next;
-      });
-      pushToast("Action saved.", "success");
-    } catch (err) {
-      pushToast(err.message, "error");
-      throw err;
-    }
-  }, [config.webhookUrl, pushToast]);
+  const onUpdateAction = useCallback(
+    async (action) => {
+      try {
+        const saved = await api.saveAction(config.webhookUrl, action, { isNew: false });
+        setActions((prev) => {
+          const next = prev.map((a) =>
+            a._matchValues?.[0] === action._matchValues?.[0] && a._matchValues?.[1] === action._matchValues?.[1] ? saved : a
+          );
+          writeCache("actions", next);
+          return next;
+        });
+        pushToast("Action saved.", "success");
+      } catch (err) {
+        pushToast(err.message, "error");
+        throw err;
+      }
+    },
+    [config.webhookUrl, pushToast]
+  );
 
-  const onDeleteAction = useCallback(async (action) => {
-    try {
-      await api.deleteAction(config.webhookUrl, action);
-      setActions((prev) => {
-        const next = prev.filter((a) => a._id !== action._id);
-        writeCache("actions", next);
-        return next;
-      });
-      pushToast("Action deleted.", "success");
-    } catch (err) {
-      pushToast(err.message, "error");
-      throw err;
-    }
-  }, [config.webhookUrl, pushToast]);
+  const onDeleteAction = useCallback(
+    async (action) => {
+      try {
+        await api.deleteAction(config.webhookUrl, action);
+        setActions((prev) => {
+          const next = prev.filter((a) => a._id !== action._id);
+          writeCache("actions", next);
+          return next;
+        });
+        pushToast("Action deleted.", "success");
+      } catch (err) {
+        pushToast(err.message, "error");
+        throw err;
+      }
+    },
+    [config.webhookUrl, pushToast]
+  );
 
-  const onSaveOilChange = useCallback(async (oilChange) => {
-    try {
-      const saved = await api.saveOilChange(config.webhookUrl, oilChange);
-      setOilChanges((prev) => {
-        const next = prev.map((o) => (o._id === oilChange._id ? saved : o));
-        writeCache("oilChanges", next);
-        return next;
-      });
-      pushToast("Oil change saved.", "success");
-    } catch (err) {
-      pushToast(err.message, "error");
-      throw err;
-    }
-  }, [config.webhookUrl, pushToast]);
+  const onSaveOilChange = useCallback(
+    async (oilChange) => {
+      try {
+        const saved = await api.saveOilChange(config.webhookUrl, oilChange);
+        setOilChanges((prev) => {
+          const next = prev.map((o) => (o._id === oilChange._id ? saved : o));
+          writeCache("oilChanges", next);
+          return next;
+        });
+        pushToast("Oil change saved.", "success");
+      } catch (err) {
+        pushToast(err.message, "error");
+        throw err;
+      }
+    },
+    [config.webhookUrl, pushToast]
+  );
 
-  const onAddSample = useCallback(async (sample, headers) => {
-    try {
-      const saved = await api.saveSample(config.webhookUrl, sample, headers);
-      setSamples((prev) => {
-        const next = [...prev, saved];
-        writeCache("samples", next);
-        return next;
-      });
-      pushToast("Sample saved.", "success");
-      return saved;
-    } catch (err) {
-      pushToast(err.message, "error");
-      throw err;
-    }
-  }, [config.webhookUrl, pushToast]);
+  const onAddSample = useCallback(
+    async (sample, headers) => {
+      try {
+        const saved = await api.saveSample(config.webhookUrl, sample, headers);
+        setSamples((prev) => {
+          const next = [...prev, saved];
+          writeCache("samples", next);
+          return next;
+        });
+        pushToast("Sample saved.", "success");
+        return saved;
+      } catch (err) {
+        pushToast(err.message, "error");
+        throw err;
+      }
+    },
+    [config.webhookUrl, pushToast]
+  );
 
   const equipmentOptions = useMemo(() => {
     const codes = new Set();
@@ -168,7 +185,15 @@ export default function App() {
   }
 
   return (
-    <div style={{ display: "flex", background: T.appBg, minHeight: "100vh", color: T.textPrimary, fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, sans-serif" }}>
+    <div
+      style={{
+        display: "flex",
+        background: T.appBg,
+        minHeight: "100vh",
+        color: T.textPrimary,
+        fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, sans-serif",
+      }}
+    >
       <style>{"@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}"}</style>
       <Sidebar
         page={page}
@@ -180,7 +205,15 @@ export default function App() {
         onFullSync={runSync}
       />
       <div style={{ flex: 1, padding: 28, overflowY: "auto" }}>
-        {page === "dashboard" && <Dashboard webhookUrl={config.webhookUrl} samples={samples} actions={actions} oilChanges={oilChanges} onSelectSample={goToReport} />}
+        {page === "dashboard" && (
+          <Dashboard
+            webhookUrl={config.webhookUrl}
+            samples={samples}
+            actions={actions}
+            oilChanges={oilChanges}
+            onSelectSample={goToReport}
+          />
+        )}
         {page === "equipment" && <Equipment samples={samples} actions={actions} oilChanges={oilChanges} onOpenReport={goToReport} />}
         {page === "report" && selectedEquipment && (
           <OilAnalysisReport

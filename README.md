@@ -1,46 +1,22 @@
 # ACC Oil Analysis App (v2)
 
-A rebuild of the Arabian Cement Oil Analysis Management app as real, readable
-React source (the previous repo, `oil-analysis-app`, only ever contained
+![CI](https://github.com/aghafar-hub/acc-oil-analysis-app/actions/workflows/ci.yml/badge.svg)
+
+The Arabian Cement Oil Analysis Management app, rebuilt as real, readable
+React source. The previous repo (`oil-analysis-app`) only ever contained
 pre-built minified bundles with no source code, which made it effectively
-impossible to maintain or fix bugs in).
+impossible to maintain or fix bugs in — this repo replaces that with a
+standard, linted, tested-by-CI project anyone can read and extend.
 
-This app uses the same Google Sheet as its database, through the same Apps
-Script Web App webhook contract (`readAll` / `append` / `updateRow` /
-`deleteRow` / `getDashboard` / `getEquipment`, etc.) — no changes to the
-sheet or the Apps Script are required to use this app, other than the
-optional `Debug Log` tab and logging additions made while diagnosing the
-original sync bug (safe to keep or remove).
+It uses the **same Google Sheet as its database**, through the same Apps
+Script Web App webhook contract — no changes to the sheet or the Apps
+Script are required to use this app.
 
-## What was fixed vs. the original app
+**📖 Full documentation: [`docs/`](./docs/README.md)** — architecture,
+a file-by-file code guide, the Google Sheet schema, the webhook API
+contract, and deployment instructions.
 
-The original app wrote every change (add/edit/delete an action, update an
-oil change, add a sample) with:
-
-```js
-fetch(webhookUrl, { method: "POST", mode: "no-cors", body: ... })
-```
-
-`no-cors` is required because the Apps Script Web App doesn't send CORS
-headers on POST responses — but it also means the browser cannot read the
-response. If the write failed on the server (row not found, a thrown error,
-anything), the app had no way to know. It optimistically updated the screen
-and assumed success. The edit looked saved, then reverted on the next sync
-because it was never actually written to the sheet.
-
-This rebuild (`src/api.js`) fixes that: every write is followed by a
-**verifying read** (a plain GET, which — unlike POST — does get readable
-CORS-enabled responses from Apps Script). If the freshly re-fetched row
-doesn't match what was just saved, the app throws a real error and shows it
-to the user via a toast, instead of silently pretending the save worked.
-Local app state is only updated after that verification succeeds.
-
-Action data is also lifted to one shared state array in `App.jsx`, used
-identically by both the Oil Analysis Report page's "Last 5 Actions" panel
-and the Action Tracker page — so an edit made from either page is reflected
-on the other immediately, with no separate copies to fall out of sync.
-
-## Setup
+## Quick start
 
 ```bash
 npm install
@@ -52,16 +28,30 @@ Open the app, go to **Settings**, and paste your Apps Script Web App URL
 `https://script.google.com/macros/s/XXXX/exec`). It's stored only in your
 browser's localStorage — never committed to this repo.
 
-## Build & deploy
-
 ```bash
-npm run build
+npm run lint          # ESLint
+npm run format        # Prettier (auto-fix)
+npm run format:check  # Prettier (check only, used in CI)
+npm run build         # production build to dist/
 ```
 
-Outputs to `dist/`. Deploy `dist/` to any static host (GitHub Pages, etc.).
-`vite.config.js` sets `base: "/acc-oil-analysis-app/"` to match being served
-from a `github.io/acc-oil-analysis-app/` style path — change it if you
-deploy elsewhere (e.g. `base: "/"` for a custom domain or root deploy).
+## What this rebuild actually fixes
+
+The original app silently lost edits: it wrote every change with
+`fetch(webhookUrl, { mode: "no-cors" })`, which cannot read the server's
+response, so a failed save looked identical to a successful one — the
+screen updated, then the edit vanished on the next sync because it was
+never actually written to the sheet.
+
+This version (`src/api.js`) follows every write with a **verifying read**
+and only updates the screen once the sheet actually reflects the change;
+otherwise it shows a real error instead of a false "saved". Action data is
+also lifted to one shared state array (`App.jsx`), used identically by the
+Oil Analysis Report page and the Action Tracker page, so an edit made from
+either one is reflected on the other immediately.
+
+Full explanation, with the diagnosis that led to it: see
+[`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md#the-sync-bug-and-its-fix).
 
 ## Project structure
 
@@ -75,30 +65,26 @@ src/
   components/
     Sidebar.jsx
     Toast.jsx
+    ErrorBoundary.jsx
     LastActionsPanel.jsx     shared "Last N Actions" widget (Report + Tracker)
     EditActionModal.jsx
   pages/
-    Dashboard.jsx
-    Equipment.jsx
-    OilAnalysisReport.jsx
-    ActionTracker.jsx
-    AddSample.jsx
-    OilChangeLog.jsx
-    SampleTracker.jsx
-    HowToUse.jsx
-    Settings.jsx
+    Dashboard.jsx / Equipment.jsx / OilAnalysisReport.jsx / ActionTracker.jsx
+    AddSample.jsx / OilChangeLog.jsx / SampleTracker.jsx / HowToUse.jsx / Settings.jsx
+docs/                        full documentation (start at docs/README.md)
+.github/workflows/ci.yml     lint + format-check + build on every push/PR
 ```
 
-## Notes / known gaps vs. the original
+See [`docs/CODE_GUIDE.md`](./docs/CODE_GUIDE.md) for what each file does.
 
-- The original `Data_Entry` sheet has a legacy "Reported Date" column far out
-  at column 87, unrelated to the other 36 columns this app reads/writes;
-  that one field is read but never written by this app (same as the
-  original).
-- The "Sample Tracker" page here shows each equipment's sample history
-  directly from `Data_Entry` rather than reading the separate
-  "Oil Sample Tracker" monthly-grid sheet tab — simpler and doesn't require
-  that sheet's cell-format parsing to stay correct.
-- Field coverage on the Add Sample / Edit Action forms favors the fields
-  visible in the original UI; a few less-used columns (e.g. particle counts,
-  PQ index, some additive fields) can be added the same way if needed.
+## Known gaps vs. the original
+
+- The `Data_Entry` sheet has a legacy "Reported Date" column far out at
+  column 87, unrelated to the other 36 columns this app reads/writes; it's
+  read but never written by this app (same as the original).
+- The "Sample Tracker" page shows each equipment's sample history directly
+  from `Data_Entry` rather than reading the separate "Oil Sample Tracker"
+  monthly-grid sheet tab.
+- Form field coverage favors what's visible in the original UI; a few
+  less-used columns (particle counts, PQ index, some additive fields) can
+  be added the same way — see [`docs/SHEET_SCHEMA.md`](./docs/SHEET_SCHEMA.md).

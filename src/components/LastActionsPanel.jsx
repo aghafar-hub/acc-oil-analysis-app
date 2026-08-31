@@ -34,7 +34,7 @@ export default function LastActionsPanel({ equipmentCode, actions, onAdd, onUpda
       if (editing.isNew) await onAdd(updated);
       else await onUpdate(updated);
       setEditing(null);
-    } catch (err) {
+    } catch {
       // onAdd/onUpdate already surface a toast; keep the modal open so the
       // user can retry instead of losing their edits.
     } finally {
@@ -78,7 +78,9 @@ export default function LastActionsPanel({ equipmentCode, actions, onAdd, onUpda
             <thead>
               <tr>
                 {["Ac.No", "Revision Date", "Sample Date", "Sample Result", "Status", "Agreed Action", "Completed Date", ""].map((h) => (
-                  <th key={h} style={s.th}>{h}</th>
+                  <th key={h} style={s.th}>
+                    {h}
+                  </th>
                 ))}
               </tr>
             </thead>
@@ -90,24 +92,49 @@ export default function LastActionsPanel({ equipmentCode, actions, onAdd, onUpda
                   <td style={{ ...s.td, whiteSpace: "nowrap" }}>{formatDate(a.sampleDate)}</td>
                   <td style={s.td}>
                     {a.sampleResult && (
-                      <span style={{ background: (RESULT_COLOR[(a.sampleResult || "").toUpperCase()] || T.textSecondary) + "22", color: RESULT_COLOR[(a.sampleResult || "").toUpperCase()] || T.textSecondary, borderRadius: 4, padding: "2px 8px", fontSize: 11, fontWeight: 700 }}>
+                      <span
+                        style={{
+                          background: (RESULT_COLOR[(a.sampleResult || "").toUpperCase()] || T.textSecondary) + "22",
+                          color: RESULT_COLOR[(a.sampleResult || "").toUpperCase()] || T.textSecondary,
+                          borderRadius: 4,
+                          padding: "2px 8px",
+                          fontSize: 11,
+                          fontWeight: 700,
+                        }}
+                      >
                         {a.sampleResult}
                       </span>
                     )}
                   </td>
                   <td style={s.td}>
-                    <span style={{ background: (STATUS_COLOR[a.status] || T.textSecondary) + "22", color: STATUS_COLOR[a.status] || T.textSecondary, borderRadius: 4, padding: "2px 8px", fontSize: 11, fontWeight: 600, whiteSpace: "nowrap" }}>
+                    <span
+                      style={{
+                        background: (STATUS_COLOR[a.status] || T.textSecondary) + "22",
+                        color: STATUS_COLOR[a.status] || T.textSecondary,
+                        borderRadius: 4,
+                        padding: "2px 8px",
+                        fontSize: 11,
+                        fontWeight: 600,
+                        whiteSpace: "nowrap",
+                      }}
+                    >
                       {a.status || "—"}
                     </span>
                   </td>
-                  <td style={{ ...s.td, maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={a.agreedAction}>
+                  <td
+                    style={{ ...s.td, maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                    title={a.agreedAction}
+                  >
                     {a.agreedAction || "—"}
                   </td>
                   <td style={{ ...s.td, whiteSpace: "nowrap" }}>{formatDate(a.completedDate)}</td>
                   <td style={s.td}>
                     <button
                       style={{ ...s.btn, padding: "3px 7px", fontSize: 11 }}
-                      onClick={(e) => { e.stopPropagation(); openEdit(a); }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openEdit(a);
+                      }}
                     >
                       <i className="ti ti-edit" aria-hidden="true" />
                     </button>
@@ -116,6 +143,67 @@ export default function LastActionsPanel({ equipmentCode, actions, onAdd, onUpda
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {viewing && !editing && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.6)",
+            zIndex: 999,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 16,
+          }}
+          onClick={() => setViewing(null)}
+        >
+          <div
+            style={{ background: T.cardBg, border: `1px solid ${T.border}`, borderRadius: 12, width: "100%", maxWidth: 480, padding: 24 }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16 }}>
+              <div>
+                <p style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>Ac. No. {viewing.acNo}</p>
+                <p style={{ margin: "2px 0 0", fontSize: 12, color: T.textSecondary }}>{viewing.equipmentCode}</p>
+              </div>
+              <button style={{ ...s.btn, padding: "6px 10px" }} onClick={() => setViewing(null)}>
+                <i className="ti ti-x" aria-hidden="true" />
+              </button>
+            </div>
+            {[
+              ["Status", viewing.status],
+              ["Revision Date", formatDate(viewing.revisionDate)],
+              ["Sample Date", formatDate(viewing.sampleDate)],
+              ["Sample Result", viewing.sampleResult],
+              ["Agreed Action", viewing.agreedAction],
+              ["Contractor", viewing.contractor],
+              ["Contractor Action", viewing.contractorAction],
+              ["Completed Date", formatDate(viewing.completedDate)],
+            ].map(([label, value]) => (
+              <div
+                key={label}
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  gap: 12,
+                  padding: "6px 0",
+                  borderBottom: `1px solid ${T.border}`,
+                  fontSize: 13,
+                }}
+              >
+                <span style={{ color: T.textSecondary }}>{label}</span>
+                <span style={{ textAlign: "right" }}>{value || "—"}</span>
+              </div>
+            ))}
+            <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 18 }}>
+              <button style={s.btnPrimary} onClick={() => openEdit(viewing)}>
+                <i className="ti ti-edit" aria-hidden="true" /> Edit
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

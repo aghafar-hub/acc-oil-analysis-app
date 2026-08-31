@@ -3,9 +3,18 @@ import { s, T } from "../theme";
 import { RATING_OPTIONS } from "../theme";
 
 const EMPTY = {
-  unitId: "", description: "", sampleId: "", sampledDate: "", reportStatus: "Normal",
-  contaminationRating: "Normal", equipmentRating: "Normal", lubricantRating: "Normal",
-  visc40C: "", tan: "", oxidation: "", water: "",
+  unitId: "",
+  description: "",
+  sampleId: "",
+  sampledDate: "",
+  reportStatus: "Normal",
+  contaminationRating: "Normal",
+  equipmentRating: "Normal",
+  lubricantRating: "Normal",
+  visc40C: "",
+  tan: "",
+  oxidation: "",
+  water: "",
   wear: { Ag: "", Al: "", Cr: "", Cu: "", Fe: "", Mo: "", Ni: "", Pb: "", Sn: "" },
 };
 
@@ -13,8 +22,12 @@ export default function AddSample({ equipmentOptions, onAdd }) {
   const [form, setForm] = useState(EMPTY);
   const [saving, setSaving] = useState(false);
 
-  function set(field, value) { setForm((f) => ({ ...f, [field]: value })); }
-  function setWear(metal, value) { setForm((f) => ({ ...f, wear: { ...f.wear, [metal]: value } })); }
+  function set(field, value) {
+    setForm((f) => ({ ...f, [field]: value }));
+  }
+  function setWear(metal, value) {
+    setForm((f) => ({ ...f, wear: { ...f.wear, [metal]: value } }));
+  }
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -38,7 +51,11 @@ export default function AddSample({ equipmentOptions, onAdd }) {
           <div>
             <label style={s.label}>Equipment Code *</label>
             <input list="equip-list" style={s.input} value={form.unitId} onChange={(e) => set("unitId", e.target.value)} required />
-            <datalist id="equip-list">{(equipmentOptions || []).map((c) => <option key={c} value={c} />)}</datalist>
+            <datalist id="equip-list">
+              {(equipmentOptions || []).map((c) => (
+                <option key={c} value={c} />
+              ))}
+            </datalist>
           </div>
           <div>
             <label style={s.label}>Description</label>
@@ -59,7 +76,9 @@ export default function AddSample({ equipmentOptions, onAdd }) {
             <div key={key}>
               <label style={s.label}>{key.replace(/([A-Z])/g, " $1").replace(/^./, (c) => c.toUpperCase())}</label>
               <select style={{ ...s.input, cursor: "pointer" }} value={form[key]} onChange={(e) => set(key, e.target.value)}>
-                {RATING_OPTIONS.map((o) => <option key={o}>{o}</option>)}
+                {RATING_OPTIONS.map((o) => (
+                  <option key={o}>{o}</option>
+                ))}
               </select>
             </div>
           ))}
@@ -67,7 +86,12 @@ export default function AddSample({ equipmentOptions, onAdd }) {
 
         <p style={{ fontSize: 12, fontWeight: 700, color: T.accent, marginBottom: 10 }}>Lubricant Properties</p>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(120px,1fr))", gap: 12, marginBottom: 16 }}>
-          {[["visc40C", "Visc@40°C (cSt)"], ["tan", "TAN (mg KOH/g)"], ["oxidation", "Oxidation (Ab/cm)"], ["water", "Water (Vol%)"]].map(([key, label]) => (
+          {[
+            ["visc40C", "Visc@40°C (cSt)"],
+            ["tan", "TAN (mg KOH/g)"],
+            ["oxidation", "Oxidation (Ab/cm)"],
+            ["water", "Water (Vol%)"],
+          ].map(([key, label]) => (
             <div key={key}>
               <label style={s.label}>{label}</label>
               <input style={s.input} type="number" step="any" value={form[key]} onChange={(e) => set(key, e.target.value)} />
@@ -85,7 +109,9 @@ export default function AddSample({ equipmentOptions, onAdd }) {
           ))}
         </div>
 
-        <button type="submit" style={s.btnPrimary} disabled={saving}>{saving ? "Saving…" : "Save Sample"}</button>
+        <button type="submit" style={s.btnPrimary} disabled={saving}>
+          {saving ? "Saving…" : "Save Sample"}
+        </button>
       </form>
     </div>
   );

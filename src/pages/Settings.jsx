@@ -16,9 +16,8 @@ export default function Settings({ config, onSave, onSync, syncState, syncMsg })
           onChange={(e) => setWebhookUrl(e.target.value)}
         />
         <p style={{ fontSize: 12, color: T.textSecondary, marginTop: 8 }}>
-          Deploy your Apps Script as a Web App (Execute as: Me, Who has access: Anyone), then paste
-          the <code>/exec</code> URL here. This is stored only in your browser (localStorage) — it
-          is never committed to the repository.
+          Deploy your Apps Script as a Web App (Execute as: Me, Who has access: Anyone), then paste the <code>/exec</code> URL here. This is
+          stored only in your browser (localStorage) — it is never committed to the repository.
         </p>
         <button style={{ ...s.btnPrimary, marginTop: 12 }} onClick={() => onSave({ webhookUrl })}>
           Save

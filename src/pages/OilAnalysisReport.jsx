@@ -21,7 +21,12 @@ export default function OilAnalysisReport({ sample, actions, oilChanges, equipme
 
   return (
     <div>
-      <div style={{ ...s.card, borderTop: `4px solid ${sample.reportStatus === "Alert" ? T.danger : sample.reportStatus === "Caution" ? T.warning : T.success}` }}>
+      <div
+        style={{
+          ...s.card,
+          borderTop: `4px solid ${sample.reportStatus === "Alert" ? T.danger : sample.reportStatus === "Caution" ? T.warning : T.success}`,
+        }}
+      >
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
           <div>
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -45,7 +50,18 @@ export default function OilAnalysisReport({ sample, actions, oilChanges, equipme
           <Stat label="Equipment Rating" value={sample.equipmentRating} />
         </div>
 
-        <div style={{ background: lastChange ? T.appBg : T.infoBarBg, border: `1px solid ${lastChange ? T.successBg : T.dangerBg}`, borderRadius: 8, padding: "10px 16px", marginBottom: 20, display: "flex", gap: 16, flexWrap: "wrap" }}>
+        <div
+          style={{
+            background: lastChange ? T.appBg : T.infoBarBg,
+            border: `1px solid ${lastChange ? T.successBg : T.dangerBg}`,
+            borderRadius: 8,
+            padding: "10px 16px",
+            marginBottom: 20,
+            display: "flex",
+            gap: 16,
+            flexWrap: "wrap",
+          }}
+        >
           <div>
             <div style={{ fontSize: 11, color: T.textSecondary }}>Last Oil Change</div>
             <div style={{ fontSize: 13, fontWeight: 600, color: lastChange ? T.success : T.danger }}>
@@ -56,7 +72,9 @@ export default function OilAnalysisReport({ sample, actions, oilChanges, equipme
             <>
               <div>
                 <div style={{ fontSize: 11, color: T.textSecondary }}>Oil Type / Brand</div>
-                <div style={{ fontSize: 13, color: T.textHighlight }}>{lastChange.oilType || "—"} {lastChange.brand ? `/ ${lastChange.brand}` : ""}</div>
+                <div style={{ fontSize: 13, color: T.textHighlight }}>
+                  {lastChange.oilType || "—"} {lastChange.brand ? `/ ${lastChange.brand}` : ""}
+                </div>
               </div>
               <div>
                 <div style={{ fontSize: 11, color: T.textSecondary }}>Next Due</div>
@@ -70,7 +88,16 @@ export default function OilAnalysisReport({ sample, actions, oilChanges, equipme
           <div>
             <p style={{ fontSize: 13, fontWeight: 700, color: T.accent, marginBottom: 12 }}>Wear Metals (ppm)</p>
             {Object.entries(wear).map(([k, v]) => (
-              <div key={k} style={{ display: "flex", justifyContent: "space-between", padding: "4px 0", borderBottom: `1px solid ${T.border}`, fontSize: 12 }}>
+              <div
+                key={k}
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  padding: "4px 0",
+                  borderBottom: `1px solid ${T.border}`,
+                  fontSize: 12,
+                }}
+              >
                 <span style={{ color: T.textSecondary }}>{k}</span>
                 <span style={{ fontFamily: "monospace" }}>{v || "—"}</span>
               </div>
@@ -79,7 +106,16 @@ export default function OilAnalysisReport({ sample, actions, oilChanges, equipme
           <div>
             <p style={{ fontSize: 13, fontWeight: 700, color: T.accent, marginBottom: 12 }}>Additives (ppm)</p>
             {Object.entries(additives).map(([k, v]) => (
-              <div key={k} style={{ display: "flex", justifyContent: "space-between", padding: "4px 0", borderBottom: `1px solid ${T.border}`, fontSize: 12 }}>
+              <div
+                key={k}
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  padding: "4px 0",
+                  borderBottom: `1px solid ${T.border}`,
+                  fontSize: 12,
+                }}
+              >
                 <span style={{ color: T.textSecondary }}>{k}</span>
                 <span style={{ fontFamily: "monospace" }}>{v || "—"}</span>
               </div>
@@ -93,14 +129,16 @@ export default function OilAnalysisReport({ sample, actions, oilChanges, equipme
               <i className="ti ti-alert-triangle" aria-hidden="true" /> Recommendations
             </p>
             {sample.recommendations.map((r, i) => (
-              <div key={i} style={{ fontSize: 13, color: T.warning, marginBottom: 8, lineHeight: 1.6 }}>• {r}</div>
+              <div key={i} style={{ fontSize: 13, color: T.warning, marginBottom: 8, lineHeight: 1.6 }}>
+                • {r}
+              </div>
             ))}
           </div>
         )}
 
         <p style={{ fontSize: 11, color: T.textMuted, textAlign: "center", marginTop: 8 }}>
-          Results and comments of this analysis are advisory only. The validity of the data may be
-          impaired by a non-representative sample or incorrect data.
+          Results and comments of this analysis are advisory only. The validity of the data may be impaired by a non-representative sample
+          or incorrect data.
         </p>
       </div>
 

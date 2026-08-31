@@ -25,22 +25,35 @@ export default function EditActionModal({ action, isNew, allActions, equipmentOp
   const field = (label, key, type = "text") => (
     <div>
       <label style={{ ...s.label, fontSize: 11 }}>{label}</label>
-      <input
-        style={{ ...s.input, fontSize: 13 }}
-        type={type}
-        value={form[key] || ""}
-        onChange={(e) => set(key, e.target.value)}
-      />
+      <input style={{ ...s.input, fontSize: 13 }} type={type} value={form[key] || ""} onChange={(e) => set(key, e.target.value)} />
     </div>
   );
 
   return (
     <div
-      style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "rgba(0,0,0,0.6)",
+        zIndex: 1000,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: 16,
+      }}
       onClick={onClose}
     >
       <div
-        style={{ background: T.cardBg, border: `1px solid ${T.border}`, borderRadius: 12, width: "100%", maxWidth: 760, maxHeight: "92vh", overflowY: "auto", padding: 24 }}
+        style={{
+          background: T.cardBg,
+          border: `1px solid ${T.border}`,
+          borderRadius: 12,
+          width: "100%",
+          maxWidth: 760,
+          maxHeight: "92vh",
+          overflowY: "auto",
+          padding: 24,
+        }}
         onClick={(e) => e.stopPropagation()}
       >
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
@@ -70,9 +83,17 @@ export default function EditActionModal({ action, isNew, allActions, equipmentOp
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(160px,1fr))", gap: 12, marginBottom: 18 }}>
           <div>
             <label style={{ ...s.label, fontSize: 11 }}>Equipment Code</label>
-            <select style={{ ...s.input, fontSize: 13, cursor: "pointer" }} value={form.equipmentCode || form.unitId || ""} onChange={(e) => set("equipmentCode", e.target.value)}>
+            <select
+              style={{ ...s.input, fontSize: 13, cursor: "pointer" }}
+              value={form.equipmentCode || form.unitId || ""}
+              onChange={(e) => set("equipmentCode", e.target.value)}
+            >
               <option value="">Select equipment…</option>
-              {(equipmentOptions || []).map((code) => <option key={code} value={code}>{code}</option>)}
+              {(equipmentOptions || []).map((code) => (
+                <option key={code} value={code}>
+                  {code}
+                </option>
+              ))}
             </select>
           </div>
           {field("Description", "description")}
@@ -86,8 +107,14 @@ export default function EditActionModal({ action, isNew, allActions, equipmentOp
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(160px,1fr))", gap: 12, marginBottom: 18 }}>
           <div>
             <label style={{ ...s.label, fontSize: 11 }}>Status</label>
-            <select style={{ ...s.input, fontSize: 13, cursor: "pointer" }} value={form.status || "Open"} onChange={(e) => set("status", e.target.value)}>
-              {STATUS_OPTIONS.map((o) => <option key={o}>{o}</option>)}
+            <select
+              style={{ ...s.input, fontSize: 13, cursor: "pointer" }}
+              value={form.status || "Open"}
+              onChange={(e) => set("status", e.target.value)}
+            >
+              {STATUS_OPTIONS.map((o) => (
+                <option key={o}>{o}</option>
+              ))}
             </select>
           </div>
           {field("Completed Date", "completedDate", "date")}
@@ -108,7 +135,9 @@ export default function EditActionModal({ action, isNew, allActions, equipmentOp
         </div>
 
         <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
-          <button style={s.btn} onClick={onClose} disabled={saving}>Cancel</button>
+          <button style={s.btn} onClick={onClose} disabled={saving}>
+            Cancel
+          </button>
           <button style={s.btnPrimary} onClick={handleSave} disabled={saving}>
             {saving ? "Saving…" : "Save"}
           </button>
