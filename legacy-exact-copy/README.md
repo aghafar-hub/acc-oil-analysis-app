@@ -9,10 +9,11 @@ the app's code, behavior, or UI was touched.
 
 **Why this exists:** the React rebuild under `src/` at the repo root was
 built from screenshots and reverse-engineering the minified bundle, and it
-diverged noticeably from the real app's actual screens, tabs, and workflow.
-This folder is the ground truth to compare against (and currently what's
-actually deployed — see `.github/workflows/deploy.yml`) while that gets
-sorted out, rather than continuing to build on a UI that doesn't match.
+initially diverged from the real app's actual screens, tabs, and workflow.
+This folder was the ground truth to compare against and, for a period, what
+was actually deployed. **As of the "Deploy to GitHub Pages" workflow's
+switch back to `npm run build` + `dist/`, this folder is no longer what's
+live** — it stays in the repo purely as a reference/rollback point.
 
 This is still the same minified, sourceless bundle described in the main
 `docs/` — editing it directly means patching compiled JS, not readable
