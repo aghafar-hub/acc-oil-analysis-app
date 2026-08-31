@@ -1,18 +1,7 @@
 import { useState } from "react";
-import { s, T } from "../theme";
+import { useTheme } from "../ThemeContext";
 import { formatDate } from "../parsers";
 import EditActionModal from "./EditActionModal";
-
-const STATUS_COLOR = { Open: T.danger, "In Progress": T.warning, Closed: T.success, "Waiting Stoppage": T.accent };
-const RESULT_COLOR = {
-  ALERT: T.danger,
-  CAUTION: T.warning,
-  NORMAL: T.success,
-  SATISFACTORY: T.success,
-  UNSATISFACTORY: T.danger,
-  "OIL CHANGED": T.accent,
-  MISSING: T.textMuted,
-};
 
 // Shared by the Oil Analysis Report page and the Action Tracker page. Both
 // consumers pass the SAME `actions` array and the SAME onAdd/onUpdate/onDelete
@@ -29,6 +18,17 @@ export default function LastActionsPanel({
   limit,
   equipmentOptions,
 }) {
+  const { T, s } = useTheme();
+  const STATUS_COLOR = { Open: T.danger, "In Progress": T.warning, Closed: T.success, "Waiting Stoppage": T.accent };
+  const RESULT_COLOR = {
+    ALERT: T.danger,
+    CAUTION: T.warning,
+    NORMAL: T.success,
+    SATISFACTORY: T.success,
+    UNSATISFACTORY: T.danger,
+    "OIL CHANGED": T.accent,
+    MISSING: T.textMuted,
+  };
   const [viewing, setViewing] = useState(null);
   const [editing, setEditing] = useState(null); // { action, isNew }
   const [saving, setSaving] = useState(false);

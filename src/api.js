@@ -60,6 +60,12 @@ export async function readAll(webhookUrl) {
     samples: (json.samples || []).filter((r) => Array.isArray(r) && r[0]).map(rowToSample),
     actions: (json.actions || []).filter((r) => Array.isArray(r) && r[0]).map(rowToAction),
     oilChanges: (json.oilChanges || []).filter((r) => Array.isArray(r) && r[0]).map(rowToOilChange),
+    // Raw rows from the "Oil Sample Tracker" sheet, header row included (row
+    // 0 = ["Equipment", "Last sample", "interval Days", "INTERVAL", "Jul-22",
+    // "Aug-22", ...]). Deliberately not parsed here — see
+    // parseTrackerRows() in parsers.js, which needs the header row to know
+    // which columns are months.
+    trackerRaw: Array.isArray(json.tracker) ? json.tracker : [],
   };
 }
 
@@ -145,4 +151,39 @@ export async function saveSample(webhookUrl, sample, headers) {
     throw new SaveVerificationError(`The sample wasn't confirmed saved to the sheet — please try again.`);
   }
   return rowToSample(savedRow);
+}
+
+// NOTE: (equipmentCode, sampleId) — this sample's match key — is not
+// guaranteed unique in the live sheet (42 real collisions found during the
+// schema audit; the lab reuses sample IDs across different sampling dates
+// for the same equipment). updateRow/deleteRow hit whichever matching row
+// the sheet lists first, so an edit to a sample sharing its ID with another
+// sample for the same equipment can land on the wrong row. Flagging this
+// here rather than solving it silently — there's no reliable disambiguator
+// available client-side without also matching on sampledDate, which itself
+// isn't guaranteed present/unique either.
+export async function updateSample(webhookUrl, sample) {
+  const row = sampleToRow(sample);
+  const matchCols = sample._matchCols || [0, 2];
+  const matchValues = sample._matchValues || [sample.unitId || "", sample.sampleId || ""];
+  await postBlind(webhookUrl, { action: "updateRow", sheet: "Data_Entry", matchCols, matchValues, row });
+
+  const verify = await getEquipmentRows(webhookUrl, sample.unitId || "");
+  const savedRow = (verify.samples || []).find((r) => String(r[2]).trim() === String(matchValues[1]).trim());
+  if (!savedRow || !rowsEqual(savedRow, row)) {
+    throw new SaveVerificationError(`The sample wasn't confirmed saved to the sheet. It may not have written — please try again.`);
+  }
+  return rowToSample(savedRow);
+}
+
+export async function deleteSample(webhookUrl, sample) {
+  const matchCols = sample._matchCols || [0, 2];
+  const matchValues = sample._matchValues || [sample.unitId || "", sample.sampleId || ""];
+  await postBlind(webhookUrl, { action: "deleteRow", sheet: "Data_Entry", matchCols, matchValues });
+
+  const verify = await getEquipmentRows(webhookUrl, sample.unitId || "");
+  const stillThere = (verify.samples || []).some((r) => String(r[2]).trim() === String(matchValues[1]).trim());
+  if (stillThere) {
+    throw new SaveVerificationError(`The sample wasn't confirmed deleted from the sheet — please try again.`);
+  }
 }

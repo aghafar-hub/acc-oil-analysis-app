@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
-import { s, T } from "../theme";
+import { useTheme } from "../ThemeContext";
 
 const PAGE_TITLES = {
   dashboard: "Dashboard",
   equipment: "Equipment",
-  report: "Report",
+  oilreport: "Oil Analysis Report",
   upload: "Add Sample",
   actions: "Action Tracker",
   oilchange: "Oil Change Log",
@@ -32,7 +32,8 @@ function useOnlineStatus() {
 // layout exactly (title, online/offline indicator, date, Sheet link, Sync
 // button), including the mobile menu button living inside it rather than in
 // a separate mobile-only header.
-export default function TopBar({ page, sample, sheetUrl, syncState, onSync, onOpenMobileNav }) {
+export default function TopBar({ page, sample, sheetUrl, syncState, onSync, onOpenMobileNav, onBack }) {
+  const { T, s } = useTheme();
   const online = useOnlineStatus();
   const title = page === "report" && sample ? `Report: ${sample.unitId}` : PAGE_TITLES[page] || "";
 
@@ -42,6 +43,11 @@ export default function TopBar({ page, sample, sheetUrl, syncState, onSync, onOp
         <button className="mobile-menu-btn" style={{ ...s.btn, padding: "6px 10px", display: "none" }} onClick={onOpenMobileNav}>
           <i className="ti ti-menu-2" aria-hidden="true" />
         </button>
+        {page === "report" && (
+          <button style={{ ...s.btn, padding: "6px 12px" }} onClick={onBack}>
+            <i className="ti ti-arrow-left" aria-hidden="true" /> Back
+          </button>
+        )}
         <span className="app-topbar-title" style={{ fontSize: 16, fontWeight: 700, color: T.textPrimary }}>
           {title}
         </span>

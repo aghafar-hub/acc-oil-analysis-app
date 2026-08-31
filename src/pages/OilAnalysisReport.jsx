@@ -1,8 +1,9 @@
-import { s, T } from "../theme";
+import { useTheme } from "../ThemeContext";
 import { formatDate } from "../parsers";
 import LastActionsPanel from "../components/LastActionsPanel";
 
 function Stat({ label, value }) {
+  const { T } = useTheme();
   return (
     <div style={{ background: T.appBg, borderRadius: 6, padding: "10px 14px" }}>
       <div style={{ fontSize: 11, color: T.textSecondary }}>{label}</div>
@@ -11,12 +12,15 @@ function Stat({ label, value }) {
   );
 }
 
-const DOT_COLOR = { Alert: T.danger, Caution: T.warning, Normal: T.success };
+function dotColor(T, status) {
+  return { Alert: T.danger, Caution: T.warning, Normal: T.success }[status] || T.textMuted;
+}
 
 // The full sample history for one equipment, newest first — every sample
 // from Data_Entry for this unitId, not just the one currently open above.
 function SampleTimeline({ samples, unitId }) {
-  const history = (samples || []).filter((s) => s.unitId === unitId).sort((a, b) => new Date(b.sampledDate) - new Date(a.sampledDate));
+  const { T, s } = useTheme();
+  const history = (samples || []).filter((smp) => smp.unitId === unitId).sort((a, b) => new Date(b.sampledDate) - new Date(a.sampledDate));
 
   if (history.length === 0) return null;
 
@@ -41,7 +45,7 @@ function SampleTimeline({ samples, unitId }) {
               height: 9,
               borderRadius: "50%",
               flexShrink: 0,
-              background: DOT_COLOR[h.reportStatus] || T.textMuted,
+              background: dotColor(T, h.reportStatus),
             }}
           />
           <div>
@@ -75,6 +79,7 @@ export default function OilAnalysisReport({
   onUpdateAction,
   onDeleteAction,
 }) {
+  const { T, s } = useTheme();
   const lastChange = (oilChanges || [])
     .filter((o) => o.equipmentCode === sample.unitId && o.changeDate)
     .sort((a, b) => new Date(b.changeDate) - new Date(a.changeDate))[0];

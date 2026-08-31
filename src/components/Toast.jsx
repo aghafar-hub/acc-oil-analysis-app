@@ -1,8 +1,9 @@
-import { T } from "../theme";
+import { useTheme } from "../ThemeContext";
 
 // Simple stacked toast notifications. Used to surface save failures instead
 // of the original app's silent no-cors write with no feedback at all.
 export default function Toast({ toasts, onDismiss }) {
+  const { T } = useTheme();
   if (!toasts.length) return null;
   return (
     <div style={{ position: "fixed", top: 16, right: 16, zIndex: 2000, display: "flex", flexDirection: "column", gap: 8, maxWidth: 380 }}>

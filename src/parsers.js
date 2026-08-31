@@ -9,6 +9,104 @@ export function formatDate(v) {
   return d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
 }
 
+// ── Oil Sample Tracker (monthly grid) ─────────────────────────────────────
+// Ported from the original app's own parsing logic, not re-derived: month
+// column headers like "Jul-22"/"Apr 2026", cell values as "STATUS|DATE"
+// (e.g. "CAUTION|26 Apr 2026") or a bare status/date string.
+
+// Parses a month-column header ("Jul-22" or "Apr 2026") into a real Date
+// (day fixed at 15th so month/year sorting is stable) or null.
+function parseMonthLabelDate(label) {
+  if (!label) return null;
+  const str = String(label).trim();
+  let m = str.match(/^([A-Za-z]+)\s+(\d{4})$/);
+  if (m) {
+    const d = new Date(`${m[1]} 15, ${m[2]}`);
+    return isNaN(d) ? null : d;
+  }
+  m = str.match(/^([A-Za-z]+)-(\d{2,4})$/);
+  if (m) {
+    let year = parseInt(m[2], 10);
+    if (year < 100) year += year >= 50 ? 1900 : 2000;
+    const d = new Date(`${m[1]} 15, ${year}`);
+    return isNaN(d) ? null : d;
+  }
+  const d = new Date(str);
+  return isNaN(d) ? null : d;
+}
+
+// Splits a tracker cell value "STATUS|DATE" into its parts; a plain value
+// with no "|" is treated as the status with no date.
+function splitTrackerCell(value) {
+  const str = String(value || "").trim();
+  const i = str.indexOf("|");
+  return i === -1 ? { status: str, date: "" } : { status: str.slice(0, i).trim(), date: str.slice(i + 1).trim() };
+}
+
+// rows: raw 2D array from the "Oil Sample Tracker" sheet, header row
+// included (rows[0] = ["Equipment", "Last sample", "interval Days",
+// "INTERVAL", "Jul-22", "Aug-22", ...]). Returns { [equipmentCode]: [{
+// monthLabel, status, date, sortDate }] } sorted newest month first.
+export function parseTrackerRows(rows) {
+  if (!rows || rows.length < 2) return {};
+  const header = rows[0];
+  const result = {};
+  for (let r = 1; r < rows.length; r++) {
+    const row = rows[r];
+    const code = String(row[0] || "").trim();
+    if (!code) continue;
+    const entries = [];
+    for (let c = 1; c < header.length; c++) {
+      const monthLabel = String(header[c] || "").trim();
+      if (!monthLabel) continue;
+      const cell = String(row[c] || "").trim();
+      if (!cell) continue;
+      const { status, date: rawDate } = splitTrackerCell(cell);
+      const monthDate = parseMonthLabelDate(monthLabel);
+      let date = rawDate;
+      if (rawDate && rawDate !== monthLabel) {
+        const parsed = parseMonthLabelDate(rawDate) || new Date(rawDate);
+        if (!isNaN(parsed)) date = parsed.toLocaleDateString("en-GB", { month: "short", year: "numeric" });
+      }
+      entries.push({ monthLabel, status, date: date || monthLabel, sortDate: monthDate ? monthDate.getTime() : 0 });
+    }
+    entries.sort((a, b) => b.sortDate - a.sortDate);
+    result[code] = entries;
+  }
+  return result;
+}
+
+// Parses an equipment's sampling interval text ("6 Months", "3 Months",
+// "Monthly", "Oil Analysis", "1 y", "If needed") into a number of months,
+// or null if there's no fixed interval.
+export function intervalMonths(freqText) {
+  if (!freqText) return null;
+  const t = String(freqText).trim().toLowerCase();
+  if (t === "oil analysis") return 36;
+  if (t === "if needed") return null;
+  const yearMatch = t.match(/^([\d.]+)\s*y$/);
+  if (yearMatch) return Math.round(parseFloat(yearMatch[1]) * 12);
+  const n = parseFloat(t);
+  return isNaN(n) ? null : n;
+}
+
+// Computes { label: "OK"|"OVERDUE"|"MISSING", daysInfo } for one equipment,
+// given its most recent sample/tracker date and its registry interval.
+export function sampleTrackerStatus(lastDateStr, intervalText) {
+  if (!intervalText || intervalText.toLowerCase() === "if needed") return { label: "OK", daysInfo: "" };
+  const months = intervalMonths(intervalText);
+  if (!months) return { label: "OK", daysInfo: "" };
+  if (!lastDateStr) return { label: "MISSING", daysInfo: "No sample recorded" };
+  const last = new Date(lastDateStr);
+  if (isNaN(last)) return { label: "MISSING", daysInfo: "Invalid date" };
+  const intervalDays = months * 30.44;
+  const ageDays = (Date.now() - last.getTime()) / 86400000;
+  const remaining = Math.round(intervalDays - ageDays);
+  if (ageDays <= intervalDays) return { label: "OK", daysInfo: `${Math.abs(remaining)}d remaining` };
+  if (ageDays <= intervalDays + 15) return { label: "OVERDUE", daysInfo: `${Math.round(ageDays - intervalDays)}d overdue` };
+  return { label: "MISSING", daysInfo: `${Math.round(ageDays - intervalDays)}d missing` };
+}
+
 // ── Action Tracker ───────────────────────────────────────────────────────
 // Columns: 0 Ac.No, 1 Equipment Code, 2 Description, 3 Oil Type,
 // 4 Revision Date, 5 Sample Date, 6 Sample Result, 7 Sample Analysis,

@@ -1,11 +1,12 @@
 import { useState } from "react";
-import { s, T } from "../theme";
+import { useTheme } from "../ThemeContext";
 import { nextAcNo, formatDate } from "../parsers";
 
 const STATUS_OPTIONS = ["Open", "In Progress", "Closed", "Waiting Stoppage"];
 const CONTRACTOR_OPTIONS = ["RHI", "ASEC"];
 
 export default function EditActionModal({ action, isNew, allActions, oilChanges, equipmentOptions, onClose, onSave, onDelete, saving }) {
+  const { T, s } = useTheme();
   const [form, setForm] = useState(() => ({ ...action }));
   const [lubPointId, setLubPointId] = useState(null);
 

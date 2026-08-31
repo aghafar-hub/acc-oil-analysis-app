@@ -1,63 +1,87 @@
-import { T } from "../theme";
+import { useTheme } from "../ThemeContext";
+import logo from "../assets/arabian-cement-logo.png";
 
+// Nav id/label/icon list ported verbatim from the original app's own `mh`
+// array — do not reorder or relabel without re-checking the original.
 const NAV = [
-  { key: "dashboard", label: "Dashboard", icon: "ti-layout-grid-add", badgeKey: "pendingActions404" },
-  { key: "equipment", label: "Equipment", icon: "ti-settings-automation" },
-  { key: "report", label: "Oil Analysis Report", icon: "ti-file-text" },
-  { key: "upload", label: "Add Sample", icon: "ti-plus" },
-  { key: "actions", label: "Action Tracker", icon: "ti-clipboard-check", badgeKey: "openActions" },
-  { key: "oilchange", label: "Oil Change Log", icon: null },
-  { key: "tracker", label: "Sample Tracker", icon: "ti-chart-line" },
-  { key: "howto", label: "How to Use", icon: "ti-help-circle" },
-  { key: "settings", label: "Settings", icon: "ti-settings" },
+  { id: "dashboard", label: "Dashboard", icon: "ti-layout-dashboard" },
+  { id: "equipment", label: "Equipment", icon: "ti-engine" },
+  { id: "oilreport", label: "Oil Analysis Report", icon: "ti-file-analytics" },
+  { id: "upload", label: "Add Sample", icon: "ti-plus" },
+  { id: "actions", label: "Action Tracker", icon: "ti-checklist" },
+  { id: "oilchange", label: "Oil Change Log", icon: "ti-oil" },
+  { id: "tracker", label: "Sample Tracker", icon: "ti-timeline" },
+  { id: "howto", label: "How to Use", icon: "ti-help-circle" },
+  { id: "settings", label: "Settings", icon: "ti-settings" },
 ];
 
-export default function Sidebar({ page, onNavigate, openActionsCount, syncState, syncMsg, cacheInfo, onFullSync }) {
+export default function Sidebar({
+  page,
+  onNavigate,
+  alertCount,
+  openActionsCount,
+  syncState,
+  syncMsg,
+  logoUrl,
+  hasCache,
+  cacheAgeMinutes,
+  onFullSync,
+  onQuickSync,
+}) {
+  const { T, s } = useTheme();
+  const dotColor = syncState === "loading" ? T.accent : syncState === "error" ? T.danger : T.success;
+
   return (
-    <div
-      style={{
-        width: 260,
-        background: T.sidebarBg,
-        borderRight: `1px solid ${T.border}`,
-        display: "flex",
-        flexDirection: "column",
-        height: "100vh",
-        position: "sticky",
-        top: 0,
-      }}
-    >
-      <div style={{ padding: "20px 20px 8px" }}>
-        <div style={{ fontWeight: 700, fontSize: 15, color: T.textPrimary }}>ARABIAN CEMENT</div>
-        <div style={{ fontSize: 11, color: T.textSecondary, letterSpacing: 1, marginTop: 2 }}>OIL ANALYSIS MANAGEMENT</div>
+    <>
+      <div style={{ padding: "18px 16px 10px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 0, marginBottom: 6 }}>
+          <img
+            src={logoUrl || logo}
+            alt="Arabian Cement Logo"
+            style={{ height: 42, width: "auto", maxWidth: 170, objectFit: "contain", flexShrink: 0 }}
+          />
+        </div>
+        <p style={{ fontSize: 9, color: "#4A6A8A", margin: 0, letterSpacing: 0.8, textTransform: "uppercase" }}>Oil Analysis Management</p>
       </div>
-      <div style={{ flex: 1, overflowY: "auto", padding: "8px 12px" }}>
+      <nav style={s.nav}>
         {NAV.map((item) => {
-          const active = page === item.key;
+          const active = page === item.id || (page === "report" && item.id === "equipment");
           return (
             <div
-              key={item.key}
-              onClick={() => onNavigate(item.key)}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                padding: "10px 12px",
-                borderRadius: 6,
-                cursor: "pointer",
-                marginBottom: 2,
-                background: active ? T.cardSubBg : "transparent",
-                borderLeft: active ? `3px solid ${T.accent}` : "3px solid transparent",
-                color: active ? T.accent : T.textSecondary,
-                fontSize: 14,
+              key={item.id}
+              style={s.navItem(active)}
+              onClick={() => {
+                onNavigate(item.id);
               }}
             >
-              <span style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                {item.icon && <i className={`ti ${item.icon}`} aria-hidden="true" />}
-                {item.label}
-              </span>
-              {item.key === "actions" && openActionsCount > 0 && (
+              <i className={`ti ${item.icon}`} style={{ fontSize: 17 }} aria-hidden="true" />
+              <span>{item.label}</span>
+              {item.id === "dashboard" && alertCount > 0 && (
                 <span
-                  style={{ background: T.dangerBg, color: T.danger, borderRadius: 10, fontSize: 11, fontWeight: 700, padding: "1px 7px" }}
+                  style={{
+                    marginLeft: "auto",
+                    background: T.danger,
+                    color: "#fff",
+                    borderRadius: 20,
+                    padding: "1px 7px",
+                    fontSize: 11,
+                    fontWeight: 700,
+                  }}
+                >
+                  {alertCount}
+                </span>
+              )}
+              {item.id === "actions" && openActionsCount > 0 && (
+                <span
+                  style={{
+                    marginLeft: "auto",
+                    background: T.warning,
+                    color: T.appBg,
+                    borderRadius: 20,
+                    padding: "1px 7px",
+                    fontSize: 10,
+                    fontWeight: 700,
+                  }}
                 >
                   {openActionsCount}
                 </span>
@@ -65,38 +89,55 @@ export default function Sidebar({ page, onNavigate, openActionsCount, syncState,
             </div>
           );
         })}
-      </div>
-      <div style={{ padding: 14, borderTop: `1px solid ${T.border}`, fontSize: 11, color: T.textSecondary }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
+      </nav>
+      <div style={{ padding: "12px 16px", borderTop: "1px solid #1E3A5F" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
           <span
             style={{
               width: 7,
               height: 7,
               borderRadius: "50%",
-              background: syncState === "error" ? T.danger : T.success,
-              display: "inline-block",
+              flexShrink: 0,
+              background: dotColor,
+              animation: syncState === "loading" ? "pulse 1s ease-in-out infinite" : "none",
             }}
           />
-          {syncMsg || "Not synced yet"}
+          <span style={{ fontSize: 10, color: "#6B8CAE", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {syncMsg || "Sheets connected"}
+          </span>
         </div>
-        {cacheInfo?.hasCache && <div>Cached data · {Math.round(cacheInfo.ageMinutes)}m old</div>}
-        <button
-          onClick={onFullSync}
-          style={{
-            marginTop: 10,
-            width: "100%",
-            background: T.accent,
-            border: "none",
-            color: "#fff",
-            borderRadius: 6,
-            padding: "8px 0",
-            fontSize: 13,
-            cursor: "pointer",
-          }}
-        >
-          <i className="ti ti-refresh" aria-hidden="true" /> Full Sync
-        </button>
+        {hasCache && (
+          <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
+            <i className="ti ti-database" style={{ fontSize: 11, color: "#4A6A8A" }} aria-hidden="true" />
+            <span style={{ fontSize: 10, color: "#4A6A8A" }}>
+              {syncState === "loading" ? "Refreshing from sheet…" : `Cached data · ${Math.round(cacheAgeMinutes)}m old`}
+            </span>
+          </div>
+        )}
+        <div style={{ display: "flex", gap: 6 }}>
+          <button
+            style={{ ...s.btnPrimary, flex: 1, fontSize: 11, padding: "7px 10px", opacity: syncState === "loading" ? 0.7 : 1 }}
+            onClick={onFullSync}
+            disabled={syncState === "loading"}
+            title="Full Sync — re-reads every sheet"
+          >
+            <i
+              className={`ti ${syncState === "loading" ? "ti-loader" : "ti-refresh"}`}
+              style={{ animation: syncState === "loading" ? "spin 1s linear infinite" : "none" }}
+              aria-hidden="true"
+            />
+            {syncState === "loading" ? " Syncing…" : " Full Sync"}
+          </button>
+          <button
+            style={{ ...s.btn, fontSize: 11, padding: "7px 10px" }}
+            onClick={onQuickSync}
+            disabled={syncState === "loading"}
+            title="Quick Sync — fetches only records changed since last sync (fast). Falls back to Full Sync if needed."
+          >
+            <i className="ti ti-bolt" aria-hidden="true" />
+          </button>
+        </div>
       </div>
-    </div>
+    </>
   );
 }
