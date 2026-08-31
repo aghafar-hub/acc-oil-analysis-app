@@ -24,6 +24,7 @@ export default function App() {
   const [samples, setSamples] = useState(() => readCache("samples")?.data || []);
   const [actions, setActions] = useState(() => readCache("actions")?.data || []);
   const [oilChanges, setOilChanges] = useState(() => readCache("oilChanges")?.data || []);
+  const [equipmentRegistry, setEquipmentRegistry] = useState(() => readCache("equipmentRegistry")?.data || []);
   const [syncState, setSyncState] = useState("idle");
   const [syncMsg, setSyncMsg] = useState("");
   const [toasts, setToasts] = useState([]);
@@ -43,13 +44,18 @@ export default function App() {
     setSyncState("loading");
     setSyncMsg("Syncing from Google Sheets…");
     try {
-      const { samples: s, actions: a, oilChanges: o } = await api.readAll(config.webhookUrl);
+      const [{ samples: s, actions: a, oilChanges: o }, registry] = await Promise.all([
+        api.readAll(config.webhookUrl),
+        api.getEquipmentRegistry(config.webhookUrl).catch(() => []), // optional sheet tab — don't fail sync if it's missing
+      ]);
       setSamples(s);
       setActions(a);
       setOilChanges(o);
+      setEquipmentRegistry(registry);
       writeCache("samples", s);
       writeCache("actions", a);
       writeCache("oilChanges", o);
+      writeCache("equipmentRegistry", registry);
       const msg = `Synced — ${s.length} samples · ${a.length} actions · ${o.length} oil changes — ${new Date().toLocaleTimeString()}`;
       setSyncMsg(msg);
       setSyncState("idle");
@@ -168,11 +174,23 @@ export default function App() {
     [config.webhookUrl, pushToast]
   );
 
+  // Equipment Registry is the authoritative list (confirmed ~152 registered
+  // equipment against the live sheet) — used when available so dropdowns
+  // include equipment that has actions/oil-change records but no sample yet.
+  // Falls back to samples + actions equipment codes if that sheet tab is
+  // missing, so this still works against a sheet without a Registry tab.
   const equipmentOptions = useMemo(() => {
+    if (equipmentRegistry.length > 0) {
+      return equipmentRegistry
+        .map((e) => e.code)
+        .filter(Boolean)
+        .sort();
+    }
     const codes = new Set();
     samples.forEach((s) => s.unitId && codes.add(s.unitId));
+    actions.forEach((a) => a.equipmentCode && codes.add(a.equipmentCode));
     return Array.from(codes).sort();
-  }, [samples]);
+  }, [equipmentRegistry, samples, actions]);
 
   const openActionsCount = useMemo(
     () => actions.filter((a) => a.status === "Open" || a.status === "In Progress" || a.status === "Waiting Stoppage").length,

@@ -103,6 +103,8 @@ export const s = {
       SATISFACTORY: T.success,
       Unsatisfactory: T.danger,
       UNSATISFACTORY: T.danger,
+      "Oil Changed": T.accent,
+      MISSING: T.textMuted,
     };
     const color = map[value] || T.textSecondary;
     return {

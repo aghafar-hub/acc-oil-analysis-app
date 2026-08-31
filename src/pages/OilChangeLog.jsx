@@ -28,7 +28,7 @@ export default function OilChangeLog({ oilChanges, onSave }) {
           <table style={s.table}>
             <thead>
               <tr>
-                {["Equipment", "Lubrication Point", "Oil Type", "Last Change", "Next Due", "Status", ""].map((h) => (
+                {["Equipment", "Asset Name", "Lubrication Point", "Oil Type", "Last Change", "Next Due", "Status", ""].map((h) => (
                   <th key={h} style={s.th}>
                     {h}
                   </th>
@@ -39,6 +39,7 @@ export default function OilChangeLog({ oilChanges, onSave }) {
               {oilChanges.map((o) => (
                 <tr key={o._id}>
                   <td style={{ ...s.td, fontFamily: "monospace" }}>{o.equipmentCode}</td>
+                  <td style={s.td}>{o.assetName}</td>
                   <td style={s.td}>{o.lubricationPoint}</td>
                   <td style={s.td}>{o.oilType}</td>
                   <td style={s.td}>{formatDate(o.changeDate)}</td>

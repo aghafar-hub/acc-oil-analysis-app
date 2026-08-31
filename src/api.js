@@ -67,6 +67,18 @@ export async function getDashboard(webhookUrl) {
   return getJSON(webhookUrl, { action: "getDashboard" });
 }
 
+// The Equipment Registry sheet is the authoritative equipment list — it has
+// every registered piece of equipment (confirmed ~152 rows against the live
+// sheet), independent of whether that equipment has any samples yet. Used
+// to build equipment dropdowns instead of deriving them from `samples`,
+// which only covers equipment that happens to already have a sample row
+// (confirmed ~144 of those, missing several equipment codes that do appear
+// in Action Tracker).
+export async function getEquipmentRegistry(webhookUrl) {
+  const json = await getJSON(webhookUrl, { action: "readEquipmentRegistry" });
+  return json.equipment || [];
+}
+
 export async function getEquipmentRows(webhookUrl, equipmentCode) {
   return getJSON(webhookUrl, { action: "getEquipment", id: equipmentCode });
 }

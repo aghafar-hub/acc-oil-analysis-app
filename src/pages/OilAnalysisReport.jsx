@@ -43,7 +43,7 @@ export default function OilAnalysisReport({ sample, actions, oilChanges, equipme
 
         <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 12, marginBottom: 20 }}>
           <Stat label="Sampled" value={formatDate(sample.sampledDate)} />
-          <Stat label="Reported" value={formatDate(sample.reportedDate)} />
+          <Stat label="Alert Type" value={sample.alertType} />
           <Stat label="Visc @40°C (cSt)" value={sample.visc40C} />
           <Stat label="Water (%)" value={sample.water} />
           <Stat label="Contamination Rating" value={sample.contaminationRating} />

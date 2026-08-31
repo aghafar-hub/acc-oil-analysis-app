@@ -108,7 +108,7 @@ export function nextAcNo(actions) {
 }
 
 // ── Oil Change Log ───────────────────────────────────────────────────────
-// Columns: 0 Equipment Code, 1 (unused), 2 Lubrication Point, 3 Frequency,
+// Columns: 0 Equipment Code, 1 Asset Name, 2 Lubrication Point, 3 Frequency,
 // 4 Oil Type, 5 Brand, 6 Quantity, 7-8 (unused), 9 Last Change, 10 Next Due,
 // 11 Status (sheet formula — never overwritten by updateRow)
 
@@ -118,7 +118,7 @@ export function rowToOilChange(row) {
   const oilType = row[4];
   return {
     equipmentCode,
-    assetName: equipmentCode,
+    assetName: row[1] || equipmentCode,
     lubricationPoint,
     frequency: row[3],
     oilType,
@@ -136,8 +136,8 @@ export function rowToOilChange(row) {
 
 export function oilChangeToRow(o) {
   return [
-    o.equipmentCode || o.assetName || "",
-    "",
+    o.equipmentCode || "",
+    o.assetName || "",
     o.lubricationPoint || "",
     o.frequency || "Oil Analysis",
     o.oilType || "",
@@ -152,8 +152,12 @@ export function oilChangeToRow(o) {
 }
 
 // ── Data_Entry (samples) ─────────────────────────────────────────────────
-// 36 columns of data the app reads/writes, plus a legacy "Reported Date"
-// column far out at index 86 that predates this app (left untouched here).
+// 37 columns: the 36 data columns below, plus Last Modified at index 36.
+// Column 34 ("Alert Type") is real sheet data — a short classification like
+// "Caution – Elevated Fe & Si" — distinct from column 35 ("Sample Analysis",
+// the longer free-text recommendation). Both the original app and an early
+// version of this rebuild silently dropped Alert Type; confirmed against the
+// live sheet (openpyxl inspection) and fixed here.
 
 export function rowToSample(row) {
   const [
@@ -191,7 +195,7 @@ export function rowToSample(row) {
     Mg,
     P,
     Zn,
-    ,
+    alertType,
     recommendationsRaw,
   ] = row;
   const num = (v) => (v === "" || v === null || v === undefined ? "" : parseFloat(v));
@@ -200,8 +204,8 @@ export function rowToSample(row) {
     description,
     sampleId,
     sampledDate: formatDate(sampledDate),
-    reportedDate: formatDate(row[86]),
     reportStatus,
+    alertType,
     contaminationRating,
     equipmentRating,
     lubricantRating,
@@ -262,6 +266,7 @@ export function sampleToRow(s) {
     additives.Mg || "",
     additives.P || "",
     additives.Zn || "",
+    s.alertType || "",
     (s.recommendations || []).join("; "),
   ];
 }
