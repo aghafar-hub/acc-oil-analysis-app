@@ -1,4 +1,12 @@
 name: Deploy to GitHub Pages
+#
+# NOTE: this currently deploys `legacy-exact-copy/` — a byte-for-byte copy of
+# the original app (same minified bundle, only the asset path adjusted for
+# this repo's hosting path) — NOT the React rebuild under `src/`. This is
+# deliberate: it gives us a live, pixel-perfect reference matching the real
+# app's screens/tabs/workflow exactly, to work from and compare against
+# while the rebuild is brought up to match. Once the rebuild matches, this
+# workflow should switch back to `npm run build` + `dist/`.
 
 on:
   push:
@@ -19,15 +27,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
-      - run: npm ci
-      - run: npm run build
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: dist
+          path: legacy-exact-copy
 
   deploy:
     needs: build
