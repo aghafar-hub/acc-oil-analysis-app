@@ -21,6 +21,17 @@ export const T = {
 };
 
 export const s = {
+  topbar: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    padding: "14px 24px",
+    borderBottom: `1px solid ${T.border}`,
+    position: "sticky",
+    top: 0,
+    background: T.appBg,
+    zIndex: 100,
+  },
   card: {
     background: T.cardBg,
     border: `1px solid ${T.border}`,

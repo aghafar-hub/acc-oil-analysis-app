@@ -3,6 +3,7 @@ import { s, T } from "../theme";
 
 export default function Settings({ config, onSave, onSync, syncState, syncMsg }) {
   const [webhookUrl, setWebhookUrl] = useState(config.webhookUrl || "");
+  const [sheetUrl, setSheetUrl] = useState(config.sheetUrl || "");
 
   return (
     <div style={{ maxWidth: 640 }}>
@@ -19,7 +20,19 @@ export default function Settings({ config, onSave, onSync, syncState, syncMsg })
           Deploy your Apps Script as a Web App (Execute as: Me, Who has access: Anyone), then paste the <code>/exec</code> URL here. This is
           stored only in your browser (localStorage) — it is never committed to the repository.
         </p>
-        <button style={{ ...s.btnPrimary, marginTop: 12 }} onClick={() => onSave({ webhookUrl })}>
+
+        <label style={{ ...s.label, marginTop: 16 }}>Google Sheet URL (optional)</label>
+        <input
+          style={s.input}
+          placeholder="https://docs.google.com/spreadsheets/d/XXXX/edit"
+          value={sheetUrl}
+          onChange={(e) => setSheetUrl(e.target.value)}
+        />
+        <p style={{ fontSize: 12, color: T.textSecondary, marginTop: 8 }}>
+          If set, a "Sheet" button appears in the top bar linking directly to the spreadsheet.
+        </p>
+
+        <button style={{ ...s.btnPrimary, marginTop: 12 }} onClick={() => onSave({ webhookUrl, sheetUrl })}>
           Save
         </button>
       </div>

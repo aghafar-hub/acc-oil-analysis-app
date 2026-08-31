@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback, useMemo } from "react";
 import Sidebar from "./components/Sidebar";
+import TopBar from "./components/TopBar";
 import Toast from "./components/Toast";
 import Dashboard from "./pages/Dashboard";
 import Equipment from "./pages/Equipment";
@@ -244,38 +245,39 @@ export default function App() {
         fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, sans-serif",
       }}
     >
+      {/*
+        Mobile layout, ported verbatim (class names, breakpoint, transform,
+        transition, shadow) from the original app's own CSS — see the
+        commit message for where this was pulled from. Do not restyle this
+        without re-checking the original first.
+      */}
       <style>{`
         @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}
-        .mobile-topbar { display: none; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .mobile-menu-btn { display: none; }
         .sidebar-backdrop { display: none; }
-        @media (max-width: 768px) {
+
+        @media (max-width: 860px) {
           .app-sidebar {
-            position: fixed;
-            top: 0; left: 0; bottom: 0;
-            z-index: 500;
-            transform: translateX(-100%);
-            transition: transform 0.2s ease;
+            position: fixed !important;
+            top: 0 !important; left: 0 !important;
+            height: 100vh !important; width: 260px !important;
+            z-index: 500 !important;
+            transform: translateX(-110%) !important;
+            transition: transform 0.28s cubic-bezier(.4,0,.2,1) !important;
+            box-shadow: 4px 0 32px rgba(0,0,0,0.55) !important;
           }
-          .app-sidebar.open { transform: translateX(0); }
-          .app-content { padding: 16px !important; }
-          .mobile-topbar {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            padding: 14px 16px;
-            border-bottom: 1px solid ${T.border};
-            position: sticky;
-            top: 0;
-            background: ${T.appBg};
-            z-index: 100;
-          }
+          .app-sidebar.open { transform: translateX(0) !important; }
           .sidebar-backdrop.open {
-            display: block;
-            position: fixed;
-            inset: 0;
-            background: rgba(0,0,0,0.5);
-            z-index: 400;
+            display: block !important; position: fixed !important;
+            inset: 0 !important; background: rgba(0,0,0,0.6) !important; z-index: 499 !important;
           }
+          .mobile-menu-btn { display: inline-flex !important; }
+          .app-main { width: 100% !important; flex: 1 1 100% !important; min-width: 0 !important; }
+          .app-topbar { padding: 10px 12px !important; flex-wrap: wrap !important; gap: 8px !important; }
+          .app-topbar-title { font-size: 14px !important; }
+          .app-content { padding: 10px !important; }
+          .topbar-date { display: none !important; }
         }
       `}</style>
       <div className={`app-sidebar${mobileNavOpen ? " open" : ""}`} style={{ flexShrink: 0 }}>
@@ -290,17 +292,15 @@ export default function App() {
         />
       </div>
       <div className={`sidebar-backdrop${mobileNavOpen ? " open" : ""}`} onClick={() => setMobileNavOpen(false)} />
-      <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
-        <div className="mobile-topbar">
-          <button
-            style={{ background: "none", border: "none", color: T.textPrimary, fontSize: 22, cursor: "pointer", padding: 4 }}
-            onClick={() => setMobileNavOpen((o) => !o)}
-            aria-label="Open menu"
-          >
-            <i className="ti ti-menu-2" aria-hidden="true" />
-          </button>
-          <strong>Arabian Cement</strong>
-        </div>
+      <div className="app-main" style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
+        <TopBar
+          page={page}
+          sample={selectedEquipment}
+          sheetUrl={config.sheetUrl}
+          syncState={syncState}
+          onSync={runSync}
+          onOpenMobileNav={() => setMobileNavOpen(true)}
+        />
         <div className="app-content" style={{ flex: 1, padding: 28, overflowY: "auto" }}>
           {page === "dashboard" && (
             <Dashboard
