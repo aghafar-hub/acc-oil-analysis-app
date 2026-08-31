@@ -11,7 +11,70 @@ function Stat({ label, value }) {
   );
 }
 
-export default function OilAnalysisReport({ sample, actions, oilChanges, equipmentOptions, onAddAction, onUpdateAction, onDeleteAction }) {
+const DOT_COLOR = { Alert: T.danger, Caution: T.warning, Normal: T.success };
+
+// The full sample history for one equipment, newest first — every sample
+// from Data_Entry for this unitId, not just the one currently open above.
+function SampleTimeline({ samples, unitId }) {
+  const history = (samples || []).filter((s) => s.unitId === unitId).sort((a, b) => new Date(b.sampledDate) - new Date(a.sampledDate));
+
+  if (history.length === 0) return null;
+
+  return (
+    <div style={s.card}>
+      <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 14 }}>Sample Timeline</div>
+      {history.map((h, i) => (
+        <div
+          key={h._id || i}
+          style={{
+            display: "flex",
+            alignItems: "flex-start",
+            gap: 10,
+            padding: "10px 0",
+            borderBottom: i < history.length - 1 ? `1px solid ${T.border}` : "none",
+          }}
+        >
+          <span
+            style={{
+              marginTop: 5,
+              width: 9,
+              height: 9,
+              borderRadius: "50%",
+              flexShrink: 0,
+              background: DOT_COLOR[h.reportStatus] || T.textMuted,
+            }}
+          />
+          <div>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <span style={{ fontWeight: 700, fontSize: 13 }}>{formatDate(h.sampledDate)}</span>
+              <span style={s.badge(h.reportStatus)}>{h.reportStatus}</span>
+            </div>
+            <div style={{ fontSize: 12, color: T.textSecondary, marginTop: 4, display: "flex", flexWrap: "wrap", gap: 14 }}>
+              <span>
+                Sample ID: <span style={{ fontFamily: "monospace", color: T.accent }}>{h.sampleId}</span>
+              </span>
+              <span>Visc: {h.visc40C || "—"} cSt</span>
+              <span>Fe: {h.wear?.Fe ?? "—"} ppm</span>
+              <span>Si: {h.contaminants?.Si ?? "—"} ppm</span>
+              <span>Water: {h.water ?? "—"}</span>
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+export default function OilAnalysisReport({
+  sample,
+  samples,
+  actions,
+  oilChanges,
+  equipmentOptions,
+  onAddAction,
+  onUpdateAction,
+  onDeleteAction,
+}) {
   const lastChange = (oilChanges || [])
     .filter((o) => o.equipmentCode === sample.unitId && o.changeDate)
     .sort((a, b) => new Date(b.changeDate) - new Date(a.changeDate))[0];
@@ -141,6 +204,8 @@ export default function OilAnalysisReport({ sample, actions, oilChanges, equipme
           or incorrect data.
         </p>
       </div>
+
+      <SampleTimeline samples={samples} unitId={sample.unitId} />
 
       <LastActionsPanel
         equipmentCode={sample.unitId}
