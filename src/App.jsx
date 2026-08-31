@@ -20,6 +20,7 @@ export default function App() {
   const [config, setConfig] = useState(() => loadConfig());
   const [page, setPage] = useState("dashboard");
   const [selectedEquipment, setSelectedEquipment] = useState(null);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   const [samples, setSamples] = useState(() => readCache("samples")?.data || []);
   const [actions, setActions] = useState(() => readCache("actions")?.data || []);
@@ -225,6 +226,12 @@ export default function App() {
   function goToReport(sample) {
     setSelectedEquipment(sample);
     setPage("report");
+    setMobileNavOpen(false);
+  }
+
+  function navigate(nextPage) {
+    setPage(nextPage);
+    setMobileNavOpen(false);
   }
 
   return (
@@ -237,58 +244,108 @@ export default function App() {
         fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, sans-serif",
       }}
     >
-      <style>{"@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}"}</style>
-      <Sidebar
-        page={page}
-        onNavigate={setPage}
-        openActionsCount={openActionsCount}
-        syncState={syncState}
-        syncMsg={syncMsg}
-        cacheInfo={{ hasCache: samples.length > 0, ageMinutes: 0 }}
-        onFullSync={runSync}
-      />
-      <div style={{ flex: 1, padding: 28, overflowY: "auto" }}>
-        {page === "dashboard" && (
-          <Dashboard
-            webhookUrl={config.webhookUrl}
-            samples={samples}
-            actions={actions}
-            oilChanges={oilChanges}
-            onSelectSample={goToReport}
-          />
-        )}
-        {page === "equipment" && <Equipment samples={samples} actions={actions} oilChanges={oilChanges} onOpenReport={goToReport} />}
-        {page === "report" && selectedEquipment && (
-          <OilAnalysisReport
-            sample={selectedEquipment}
-            samples={samples}
-            actions={actions}
-            oilChanges={oilChanges}
-            equipmentOptions={equipmentOptions}
-            onAddAction={onAddAction}
-            onUpdateAction={onUpdateAction}
-            onDeleteAction={onDeleteAction}
-          />
-        )}
-        {page === "report" && !selectedEquipment && (
-          <div style={{ color: T.textSecondary }}>Select a sample from the Dashboard or Equipment page first.</div>
-        )}
-        {page === "upload" && <AddSample equipmentOptions={equipmentOptions} onAdd={onAddSample} />}
-        {page === "actions" && (
-          <ActionTracker
-            actions={actions}
-            samples={samples}
-            oilChanges={oilChanges}
-            equipmentOptions={equipmentOptions}
-            onAddAction={onAddAction}
-            onUpdateAction={onUpdateAction}
-            onDeleteAction={onDeleteAction}
-          />
-        )}
-        {page === "oilchange" && <OilChangeLog oilChanges={oilChanges} onSave={onSaveOilChange} />}
-        {page === "tracker" && <SampleTracker samples={samples} />}
-        {page === "howto" && <HowToUse />}
-        {page === "settings" && <Settings config={config} onSave={updateConfig} onSync={runSync} syncState={syncState} syncMsg={syncMsg} />}
+      <style>{`
+        @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}
+        .mobile-topbar { display: none; }
+        .sidebar-backdrop { display: none; }
+        @media (max-width: 768px) {
+          .app-sidebar {
+            position: fixed;
+            top: 0; left: 0; bottom: 0;
+            z-index: 500;
+            transform: translateX(-100%);
+            transition: transform 0.2s ease;
+          }
+          .app-sidebar.open { transform: translateX(0); }
+          .app-content { padding: 16px !important; }
+          .mobile-topbar {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 14px 16px;
+            border-bottom: 1px solid ${T.border};
+            position: sticky;
+            top: 0;
+            background: ${T.appBg};
+            z-index: 100;
+          }
+          .sidebar-backdrop.open {
+            display: block;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.5);
+            z-index: 400;
+          }
+        }
+      `}</style>
+      <div className={`app-sidebar${mobileNavOpen ? " open" : ""}`} style={{ flexShrink: 0 }}>
+        <Sidebar
+          page={page}
+          onNavigate={navigate}
+          openActionsCount={openActionsCount}
+          syncState={syncState}
+          syncMsg={syncMsg}
+          cacheInfo={{ hasCache: samples.length > 0, ageMinutes: 0 }}
+          onFullSync={runSync}
+        />
+      </div>
+      <div className={`sidebar-backdrop${mobileNavOpen ? " open" : ""}`} onClick={() => setMobileNavOpen(false)} />
+      <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
+        <div className="mobile-topbar">
+          <button
+            style={{ background: "none", border: "none", color: T.textPrimary, fontSize: 22, cursor: "pointer", padding: 4 }}
+            onClick={() => setMobileNavOpen((o) => !o)}
+            aria-label="Open menu"
+          >
+            <i className="ti ti-menu-2" aria-hidden="true" />
+          </button>
+          <strong>Arabian Cement</strong>
+        </div>
+        <div className="app-content" style={{ flex: 1, padding: 28, overflowY: "auto" }}>
+          {page === "dashboard" && (
+            <Dashboard
+              webhookUrl={config.webhookUrl}
+              samples={samples}
+              actions={actions}
+              oilChanges={oilChanges}
+              onSelectSample={goToReport}
+            />
+          )}
+          {page === "equipment" && <Equipment samples={samples} actions={actions} oilChanges={oilChanges} onOpenReport={goToReport} />}
+          {page === "report" && selectedEquipment && (
+            <OilAnalysisReport
+              sample={selectedEquipment}
+              samples={samples}
+              actions={actions}
+              oilChanges={oilChanges}
+              equipmentOptions={equipmentOptions}
+              onAddAction={onAddAction}
+              onUpdateAction={onUpdateAction}
+              onDeleteAction={onDeleteAction}
+            />
+          )}
+          {page === "report" && !selectedEquipment && (
+            <div style={{ color: T.textSecondary }}>Select a sample from the Dashboard or Equipment page first.</div>
+          )}
+          {page === "upload" && <AddSample equipmentOptions={equipmentOptions} onAdd={onAddSample} />}
+          {page === "actions" && (
+            <ActionTracker
+              actions={actions}
+              samples={samples}
+              oilChanges={oilChanges}
+              equipmentOptions={equipmentOptions}
+              onAddAction={onAddAction}
+              onUpdateAction={onUpdateAction}
+              onDeleteAction={onDeleteAction}
+            />
+          )}
+          {page === "oilchange" && <OilChangeLog oilChanges={oilChanges} onSave={onSaveOilChange} />}
+          {page === "tracker" && <SampleTracker samples={samples} />}
+          {page === "howto" && <HowToUse />}
+          {page === "settings" && (
+            <Settings config={config} onSave={updateConfig} onSync={runSync} syncState={syncState} syncMsg={syncMsg} />
+          )}
+        </div>
       </div>
       <Toast toasts={toasts} onDismiss={dismissToast} />
     </div>
