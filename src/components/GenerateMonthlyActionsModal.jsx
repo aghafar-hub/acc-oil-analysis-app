@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useTheme } from "../ThemeContext";
-import { formatDate, sameCalendarDay } from "../parsers";
+import { formatDate } from "../parsers";
 import { toISODate, latestOilChangeFor, autofillFromEquipment } from "../actionAutofill";
 
 // "Caution" and "Warning" are the same bucket everywhere else in the app
@@ -9,8 +9,12 @@ import { toISODate, latestOilChangeFor, autofillFromEquipment } from "../actionA
 const QUALIFYING_STATUSES = new Set(["Caution", "Warning", "Alert"]);
 
 // For each equipment code, its single latest-dated sample — then keep only
-// the ones whose status is Caution/Warning/Alert AND that don't already
-// have an action recorded for this exact equipment + sample date.
+// the ones whose status is Caution/Warning/Alert AND whose equipment has no
+// action recorded at all yet (open or closed). Deliberately NOT scoped to
+// "an action matching this exact sample date" — this tool exists to catch
+// equipment that has never been actioned, so once any action exists for an
+// equipment it's assumed to already be tracked and won't be re-offered here
+// even if a newer Caution/Alert sample comes in later.
 function computeCandidates(samples, actions, equipmentRegistry, oilChanges) {
   const latestByEquip = {};
   (samples || []).forEach((sm) => {
@@ -20,36 +24,27 @@ function computeCandidates(samples, actions, equipmentRegistry, oilChanges) {
     if (!cur || new Date(sm.sampledDate) > new Date(cur.sampledDate)) latestByEquip[code] = sm;
   });
 
-  return (
-    Object.values(latestByEquip)
-      .filter((sm) => QUALIFYING_STATUSES.has(sm.reportStatus))
-      // Checked against every action ever recorded for this equipment, no
-      // matter how old — not just its own most recent one. Uses
-      // sameCalendarDay() rather than a plain string match since an action's
-      // Sample Date can round-trip through the sheet in a differently
-      // formatted (but same-day) string — see sameCalendarDay()'s own
-      // comment for why a strict === would occasionally miss a real match
-      // and let this generate a duplicate action.
-      .filter((sm) => !(actions || []).some((a) => a.equipmentCode === sm.unitId && sameCalendarDay(a.sampleDate, sm.sampledDate)))
-      .map((sm) => {
-        const filled = autofillFromEquipment(sm.unitId, { equipmentRegistry, oilChanges, allActions: actions, excludeId: null });
-        const latestOil = latestOilChangeFor(oilChanges, sm.unitId);
-        return {
-          sample: sm,
-          equipmentCode: sm.unitId,
-          description: filled.description,
-          oilType: filled.oilType,
-          contractor: filled.contractor,
-          lastChange: latestOil ? formatDate(latestOil.changeDate) : "",
-          prevMonthAgreedAction: filled.prevMonthAgreedAction,
-          revisionDate: toISODate(new Date()),
-          sampleDate: sm.sampledDate,
-          sampleResult: (sm.reportStatus || "").toUpperCase(),
-          status: "Open",
-        };
-      })
-      .sort((a, b) => a.equipmentCode.localeCompare(b.equipmentCode))
-  );
+  return Object.values(latestByEquip)
+    .filter((sm) => QUALIFYING_STATUSES.has(sm.reportStatus))
+    .filter((sm) => !(actions || []).some((a) => a.equipmentCode === sm.unitId))
+    .map((sm) => {
+      const filled = autofillFromEquipment(sm.unitId, { equipmentRegistry, oilChanges, allActions: actions, excludeId: null });
+      const latestOil = latestOilChangeFor(oilChanges, sm.unitId);
+      return {
+        sample: sm,
+        equipmentCode: sm.unitId,
+        description: filled.description,
+        oilType: filled.oilType,
+        contractor: filled.contractor,
+        lastChange: latestOil ? formatDate(latestOil.changeDate) : "",
+        prevMonthAgreedAction: filled.prevMonthAgreedAction,
+        revisionDate: toISODate(new Date()),
+        sampleDate: sm.sampledDate,
+        sampleResult: (sm.reportStatus || "").toUpperCase(),
+        status: "Open",
+      };
+    })
+    .sort((a, b) => a.equipmentCode.localeCompare(b.equipmentCode));
 }
 
 export default function GenerateMonthlyActionsModal({ samples, actions, equipmentRegistry, oilChanges, onAddAction, onClose }) {
@@ -157,12 +152,13 @@ export default function GenerateMonthlyActionsModal({ samples, actions, equipmen
           )}
         </div>
         <p style={{ fontSize: 12, color: T.textSecondary, margin: "0 0 18px" }}>
-          Equipment whose most recent sample is Caution or Alert and has no action yet for that equipment + sample date.
+          Equipment whose most recent sample is Caution or Alert and that has no action at all yet — open or closed. Equipment already
+          tracked by an existing action won't be re-offered here, even on a newer Caution/Alert sample.
         </p>
 
         {candidates.length === 0 && (
           <div style={{ ...s.card, textAlign: "center", padding: 30, color: T.textMuted, fontSize: 13 }}>
-            No qualifying equipment — every Caution/Alert equipment already has an action for its latest sample.
+            No qualifying equipment — every Caution/Alert equipment already has at least one action on record.
           </div>
         )}
 

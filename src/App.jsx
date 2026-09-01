@@ -34,6 +34,8 @@ function AppShell({ config, setConfig }) {
   const { T } = useTheme();
   const [page, setPage] = useState("dashboard");
   const [selectedEquipment, setSelectedEquipment] = useState(null);
+  const [reportOrigin, setReportOrigin] = useState("dashboard"); // where "Back" on the Oil Analysis Report returns to
+  const [equipmentSelectedCode, setEquipmentSelectedCode] = useState(""); // sticky so Equipment restores the same equipment after Back
   const [oilReportCode, setOilReportCode] = useState("");
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
@@ -271,8 +273,9 @@ function AppShell({ config, setConfig }) {
   const alertCount = useMemo(() => samples.filter((sm) => sm.reportStatus === "Alert").length, [samples]);
   const openActionsCount = useMemo(() => actions.filter((a) => a.status === "Open" || a.status === "In Progress").length, [actions]);
 
-  function goToReport(sample) {
+  function goToReport(sample, origin = "dashboard") {
     setSelectedEquipment(sample);
+    setReportOrigin(origin);
     setPage("report");
     setMobileNavOpen(false);
   }
@@ -387,7 +390,7 @@ function AppShell({ config, setConfig }) {
           syncState={syncState}
           onSync={runSync}
           onOpenMobileNav={() => setMobileNavOpen(true)}
-          onBack={() => navigate("equipment")}
+          onBack={() => navigate(reportOrigin === "equipment" ? "equipment" : "dashboard")}
         />
         <div className="app-content" style={{ flex: 1, overflowY: "auto", padding: 24, background: T.appBg }}>
           {page === "dashboard" && (
@@ -396,7 +399,7 @@ function AppShell({ config, setConfig }) {
               actions={actions}
               oilChanges={oilChanges}
               equipmentRegistry={equipmentRegistry}
-              onSelectSample={goToReport}
+              onSelectSample={(sm) => goToReport(sm, "dashboard")}
             />
           )}
           {page === "equipment" && (
@@ -406,7 +409,7 @@ function AppShell({ config, setConfig }) {
               actions={actions}
               oilChanges={oilChanges}
               actionRegistry={actionRegistry}
-              onSelectSample={goToReport}
+              onSelectSample={(sm) => goToReport(sm, "equipment")}
               onEditSample={onEditSample}
               onDeleteSample={onDeleteSample}
               onOpenReport={goToOilReport}
@@ -414,6 +417,8 @@ function AppShell({ config, setConfig }) {
               onUpdateAction={onUpdateAction}
               onDeleteAction={onDeleteAction}
               onSaveOilChange={onSaveOilChange}
+              initialCode={equipmentSelectedCode}
+              onCodeChange={setEquipmentSelectedCode}
             />
           )}
           {page === "report" && selectedEquipment && (

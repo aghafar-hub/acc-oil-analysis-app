@@ -32,11 +32,46 @@ function daysBetween(dateStr, refMs) {
 
 const CONTRACTOR_COLORS = ["#00B4D8", "#B369FF", "#F4A261", "#2DC653"];
 
+// Click-to-expand detail list shown inline under a Dashboard card — no
+// navigation, just enough of a breakdown to answer "which ones?" on the
+// spot. Capped so one busy tile can't blow out the whole page's layout.
+function ExpandPanel({ T, items, renderItem, emptyText }) {
+  return (
+    <div
+      style={{
+        marginTop: 10,
+        paddingTop: 10,
+        borderTop: `1px dashed ${T.border2}`,
+        display: "flex",
+        flexDirection: "column",
+        gap: 6,
+        maxHeight: 190,
+        overflowY: "auto",
+      }}
+      onClick={(e) => e.stopPropagation()}
+    >
+      {items.length === 0 ? (
+        <div style={{ fontSize: 11.5, color: T.textMuted }}>{emptyText}</div>
+      ) : (
+        <>
+          {items.slice(0, 8).map(renderItem)}
+          {items.length > 8 && <div style={{ fontSize: 10.5, color: T.textMuted }}>+{items.length - 8} more</div>}
+        </>
+      )}
+    </div>
+  );
+}
+
 export default function Dashboard({ samples, actions, oilChanges, equipmentRegistry, onSelectSample }) {
   const { T, s } = useTheme();
   const [statusFilter, setStatusFilter] = useState("All");
   const [areaFilter, setAreaFilter] = useState("All");
+  const [expanded, setExpanded] = useState(null);
   const now = Date.now();
+
+  function toggleExpand(key) {
+    setExpanded((cur) => (cur === key ? null : key));
+  }
 
   const registry = useMemo(() => equipmentRegistry || [], [equipmentRegistry]);
 
@@ -58,8 +93,12 @@ export default function Dashboard({ samples, actions, oilChanges, equipmentRegis
   }, [scopedSamples]);
   const latestList = Object.values(latestByEquip);
 
-  const openActions = scopedActions.filter((a) => a.status === "Open").length;
-  const overdueOilChanges = scopedOilChanges.filter((o) => o.status === "Overdue").length;
+  const openActionsList = scopedActions.filter((a) => a.status === "Open");
+  const overdueOilChangesList = [...scopedOilChanges]
+    .filter((o) => o.status === "Overdue")
+    .sort((a, b) => new Date(a.nextDueDate || 0) - new Date(b.nextDueDate || 0));
+  const openActions = openActionsList.length;
+  const overdueOilChanges = overdueOilChangesList.length;
 
   const statusCounts = {
     Normal: latestList.filter((d) => d.reportStatus === "Normal").length,
@@ -92,44 +131,110 @@ export default function Dashboard({ samples, actions, oilChanges, equipmentRegis
   ).length;
   const openActionsNew7d = scopedActions.filter((a) => a.status === "Open" && (daysBetween(a.revisionDate, now) ?? 999) <= 7).length;
   const newlyOverdue7d = scopedOilChanges.filter((o) => o.status === "Overdue" && (daysBetween(o.nextDueDate, now) ?? 999) <= 7).length;
-  const closedThisMonth = scopedActions.filter((a) => {
+  const alertSamplesList = latestList.filter((d) => d.reportStatus === "Alert");
+  const closedThisMonthList = scopedActions.filter((a) => {
     if (a.status !== "Closed" || !a.completedDate) return false;
     const d = new Date(a.completedDate);
     const t = new Date(now);
     return !isNaN(d) && d.getMonth() === t.getMonth() && d.getFullYear() === t.getFullYear();
-  }).length;
+  });
+  const closedThisMonth = closedThisMonthList.length;
+
+  const sampleRowItem = (sm) => (
+    <div key={sm._id || sm.unitId} style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 11 }}>
+      <span style={{ fontFamily: "monospace", color: T.accent }}>{sm.unitId}</span>
+      <span style={{ color: T.textSecondary }}>{formatDate(sm.sampledDate) || "—"}</span>
+    </div>
+  );
+  const actionRowItem = (a) => (
+    <div key={a._id} style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 11 }}>
+      <span style={{ fontFamily: "monospace", color: T.accent, flexShrink: 0 }}>{a.equipmentCode}</span>
+      <span style={{ color: T.textSecondary, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+        {a.agreedAction || a.description || "—"}
+      </span>
+    </div>
+  );
+  const oilChangeRowItem = (o) => (
+    <div key={o._id} style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 11 }}>
+      <span style={{ fontFamily: "monospace", color: T.accent }}>{o.equipmentCode}</span>
+      <span style={{ color: T.danger, fontWeight: 700 }}>{formatDate(o.nextDueDate) || "—"}</span>
+    </div>
+  );
+  const oilChangeStatusRowItem = (o) => (
+    <div key={o._id} style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 11 }}>
+      <span style={{ fontFamily: "monospace", color: T.accent }}>{o.equipmentCode}</span>
+      <span style={{ color: o.status === "Overdue" ? T.danger : T.success, fontWeight: 700 }}>{o.status}</span>
+    </div>
+  );
+  const actionStatusRowItem = (a) => (
+    <div key={a._id} style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 11 }}>
+      <span style={{ fontFamily: "monospace", color: T.accent }}>{a.equipmentCode}</span>
+      <span
+        style={{
+          color: T[{ Open: "danger", "In Progress": "warning", "Waiting Stoppage": "accent", Closed: "success" }[a.status]],
+          fontWeight: 700,
+        }}
+      >
+        {a.status}
+      </span>
+    </div>
+  );
 
   const countingCards = [
     {
+      key: "count-alert",
       label: "Alert Samples",
       value: statusCounts.Alert,
+      list: alertSamplesList,
+      renderItem: sampleRowItem,
       sub: alertSamplesNew7d > 0 ? `${alertSamplesNew7d} new in last 7d` : "none new this week",
       color: "danger",
       icon: "ti-alert-triangle",
     },
     {
+      key: "count-open-actions",
       label: "Open Actions",
       value: openActions,
+      list: openActionsList,
+      renderItem: actionRowItem,
       sub: openActionsNew7d > 0 ? `${openActionsNew7d} opened in last 7d` : "none opened this week",
       color: "danger",
       icon: "ti-clipboard-list",
     },
     {
+      key: "count-overdue-oil",
       label: "Overdue Oil Changes",
       value: overdueOilChanges,
+      list: overdueOilChangesList,
+      renderItem: oilChangeRowItem,
       sub: newlyOverdue7d > 0 ? `${newlyOverdue7d} newly overdue` : "none newly overdue",
       color: "warning",
       icon: "ti-clock-alert",
     },
-    { label: "Closed This Month", value: closedThisMonth, sub: "actions completed", color: "success", icon: "ti-check" },
+    {
+      key: "count-closed",
+      label: "Closed This Month",
+      value: closedThisMonth,
+      list: closedThisMonthList,
+      renderItem: actionRowItem,
+      sub: "actions completed",
+      color: "success",
+      icon: "ti-check",
+    },
   ];
 
   // ── Action Tracker mini summary ───────────────────────────────────
+  const actionsByStatus = {
+    Open: scopedActions.filter((a) => a.status === "Open"),
+    "In Progress": scopedActions.filter((a) => a.status === "In Progress"),
+    "Waiting Stoppage": scopedActions.filter((a) => a.status === "Waiting Stoppage"),
+    Closed: scopedActions.filter((a) => a.status === "Closed"),
+  };
   const actionStatusCounts = {
-    Open: scopedActions.filter((a) => a.status === "Open").length,
-    "In Progress": scopedActions.filter((a) => a.status === "In Progress").length,
-    "Waiting Stoppage": scopedActions.filter((a) => a.status === "Waiting Stoppage").length,
-    Closed: scopedActions.filter((a) => a.status === "Closed").length,
+    Open: actionsByStatus.Open.length,
+    "In Progress": actionsByStatus["In Progress"].length,
+    "Waiting Stoppage": actionsByStatus["Waiting Stoppage"].length,
+    Closed: actionsByStatus.Closed.length,
   };
   const oldestOpenAction = scopedActions
     .filter((a) => a.status !== "Closed" && a.revisionDate)
@@ -160,6 +265,8 @@ export default function Dashboard({ samples, actions, oilChanges, equipmentRegis
       closureRatePct,
       pointCount: pointsForC.length,
       actionCount: actionsForC.length,
+      pointsForC: [...pointsForC].sort((a, b) => (a.status === "Overdue" ? -1 : 1) - (b.status === "Overdue" ? -1 : 1)),
+      actionsForC,
     };
   });
 
@@ -322,6 +429,7 @@ export default function Dashboard({ samples, actions, oilChanges, equipmentRegis
               <div
                 key={d.label}
                 onClick={() => setStatusFilter(statusFilter === d.status ? "All" : d.status)}
+                title={`${d.count} ${d.label} — click to filter Equipment Status below`}
                 style={{
                   display: "flex",
                   alignItems: "center",
@@ -344,31 +452,36 @@ export default function Dashboard({ samples, actions, oilChanges, equipmentRegis
         <div style={{ ...s.card, marginBottom: 0 }}>
           <div style={{ fontSize: 13, fontWeight: 700, color: T.textPrimary, marginBottom: 12 }}>Action Tracker</div>
           <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
-            {Object.entries(actionStatusCounts).map(([label, n]) => (
-              <div
-                key={label}
-                style={{
-                  flex: 1,
-                  textAlign: "center",
-                  background: T.cardSubBg,
-                  border: `1px solid ${T.border2}`,
-                  borderRadius: 8,
-                  padding: "7px 3px",
-                }}
-              >
+            {Object.entries(actionStatusCounts).map(([label, n]) => {
+              const key = `action-${label}`;
+              const isOpen = expanded === key;
+              const color = T[{ Open: "danger", "In Progress": "warning", "Waiting Stoppage": "accent", Closed: "success" }[label]];
+              return (
                 <div
+                  key={label}
+                  onClick={() => n > 0 && toggleExpand(key)}
+                  title={`${n} ${label}${n > 0 ? " — click for details" : ""}`}
                   style={{
-                    fontSize: 15,
-                    fontWeight: 800,
-                    color: T[{ Open: "danger", "In Progress": "warning", "Waiting Stoppage": "accent", Closed: "success" }[label]],
+                    flex: 1,
+                    textAlign: "center",
+                    background: isOpen ? T.cardBg : T.cardSubBg,
+                    border: `1px solid ${isOpen ? color : T.border2}`,
+                    borderRadius: 8,
+                    padding: "7px 3px",
+                    cursor: n > 0 ? "pointer" : "default",
                   }}
                 >
-                  {n}
+                  <div style={{ fontSize: 15, fontWeight: 800, color }}>{n}</div>
+                  <div style={{ fontSize: 8.5, color: T.textMuted, marginTop: 2, textTransform: "uppercase" }}>{label}</div>
                 </div>
-                <div style={{ fontSize: 8.5, color: T.textMuted, marginTop: 2, textTransform: "uppercase" }}>{label}</div>
-              </div>
-            ))}
+              );
+            })}
           </div>
+          {["Open", "In Progress", "Waiting Stoppage", "Closed"].map((label) => {
+            const key = `action-${label}`;
+            if (expanded !== key) return null;
+            return <ExpandPanel key={key} T={T} items={actionsByStatus[label]} emptyText="None." renderItem={actionRowItem} />;
+          })}
           {oldestOpenAction ? (
             <div style={{ fontSize: 11.5, color: T.textSecondary, display: "flex", alignItems: "center", gap: 6 }}>
               <i className="ti ti-clock-alert" style={{ color: T.danger }} aria-hidden="true" />
@@ -382,9 +495,24 @@ export default function Dashboard({ samples, actions, oilChanges, equipmentRegis
 
         <div style={{ ...s.card, marginBottom: 0 }}>
           <div style={{ fontSize: 13, fontWeight: 700, color: T.textPrimary, marginBottom: 12 }}>Oil Change Forecast</div>
-          <div style={{ fontSize: 20, fontWeight: 800, color: overdueOilChanges > 0 ? T.danger : T.success }}>
+          <div
+            onClick={() => overdueOilChanges > 0 && toggleExpand("oilchange-overdue")}
+            title={`${overdueOilChanges} overdue oil change point${overdueOilChanges === 1 ? "" : "s"}${
+              overdueOilChanges > 0 ? " — click for details" : ""
+            }`}
+            style={{
+              fontSize: 20,
+              fontWeight: 800,
+              color: overdueOilChanges > 0 ? T.danger : T.success,
+              cursor: overdueOilChanges > 0 ? "pointer" : "default",
+              display: "inline-block",
+            }}
+          >
             {overdueOilChanges} <span style={{ fontSize: 11, fontWeight: 600, color: T.textSecondary }}>overdue</span>
           </div>
+          {expanded === "oilchange-overdue" && (
+            <ExpandPanel T={T} items={overdueOilChangesList} emptyText="None." renderItem={oilChangeRowItem} />
+          )}
           <div style={{ fontSize: 11.5, color: T.textSecondary, marginTop: 8 }}>
             {nextDue ? (
               <>
@@ -431,19 +559,60 @@ export default function Dashboard({ samples, actions, oilChanges, equipmentRegis
                       </span>
                     )}
                   </div>
-                  {contractorStats.map((c) => (
-                    <div key={c.name} style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
-                      <span style={{ width: 44, fontSize: 11, fontWeight: 800, color: c.color, flexShrink: 0 }}>{c.name}</span>
-                      <span style={{ flex: 1, height: 14, borderRadius: 999, background: T.border, overflow: "hidden" }}>
-                        <span
-                          style={{ display: "block", height: "100%", width: `${c[key] ?? 0}%`, borderRadius: 999, background: c.color }}
-                        />
-                      </span>
-                      <span style={{ width: 40, fontSize: 12.5, fontWeight: 800, color: c.color, textAlign: "right", flexShrink: 0 }}>
-                        {c[key] == null ? "—" : `${c[key]}%`}
-                      </span>
-                    </div>
-                  ))}
+                  {contractorStats.map((c) => {
+                    const ckey = `contractor-${key}-${c.name}`;
+                    const isOpen = expanded === ckey;
+                    const hasData = c[key] != null;
+                    return (
+                      <div key={c.name}>
+                        <div
+                          onClick={() => hasData && toggleExpand(ckey)}
+                          title={`${c.name} — ${label}${hasData ? " — click for details" : ""}`}
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 10,
+                            marginBottom: 8,
+                            cursor: hasData ? "pointer" : "default",
+                            opacity: hasData ? 1 : 0.6,
+                          }}
+                        >
+                          <span style={{ width: 44, fontSize: 11, fontWeight: 800, color: c.color, flexShrink: 0 }}>{c.name}</span>
+                          <span
+                            style={{
+                              flex: 1,
+                              height: 14,
+                              borderRadius: 999,
+                              background: T.border,
+                              overflow: "hidden",
+                              outline: isOpen ? `2px solid ${c.color}` : "none",
+                            }}
+                          >
+                            <span
+                              style={{
+                                display: "block",
+                                height: "100%",
+                                width: `${c[key] ?? 0}%`,
+                                borderRadius: 999,
+                                background: c.color,
+                              }}
+                            />
+                          </span>
+                          <span style={{ width: 40, fontSize: 12.5, fontWeight: 800, color: c.color, textAlign: "right", flexShrink: 0 }}>
+                            {c[key] == null ? "—" : `${c[key]}%`}
+                          </span>
+                        </div>
+                        {isOpen && (
+                          <ExpandPanel
+                            T={T}
+                            items={key === "onTimePct" ? c.pointsForC : c.actionsForC}
+                            emptyText="No records."
+                            renderItem={key === "onTimePct" ? oilChangeStatusRowItem : actionStatusRowItem}
+                          />
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               );
             })}
@@ -453,30 +622,45 @@ export default function Dashboard({ samples, actions, oilChanges, equipmentRegis
 
       {/* ── counting cards ────────────────────────────────────────────── */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(190px,1fr))", gap: 12, marginBottom: 20 }}>
-        {countingCards.map((m) => (
-          <div key={m.label} style={{ ...s.metricCard, display: "flex", alignItems: "center", gap: 12 }}>
+        {countingCards.map((m) => {
+          const isOpen = expanded === m.key;
+          return (
             <div
+              key={m.label}
+              onClick={() => m.value > 0 && toggleExpand(m.key)}
+              title={`${m.value} ${m.label}${m.value > 0 ? " — click for details" : ""}`}
               style={{
-                width: 32,
-                height: 32,
-                borderRadius: 9,
-                background: T[m.color] + "2A",
-                color: T[m.color],
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                flexShrink: 0,
+                ...s.metricCard,
+                cursor: m.value > 0 ? "pointer" : "default",
+                border: `1px solid ${isOpen ? T[m.color] : T.border}`,
               }}
             >
-              <i className={`ti ${m.icon}`} style={{ fontSize: 16 }} aria-hidden="true" />
+              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                <div
+                  style={{
+                    width: 32,
+                    height: 32,
+                    borderRadius: 9,
+                    background: T[m.color] + "2A",
+                    color: T[m.color],
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    flexShrink: 0,
+                  }}
+                >
+                  <i className={`ti ${m.icon}`} style={{ fontSize: 16 }} aria-hidden="true" />
+                </div>
+                <div>
+                  <div style={{ fontSize: 20, fontWeight: 800, color: T[m.color] }}>{m.value}</div>
+                  <div style={{ fontSize: 10, color: T.textSecondary }}>{m.label}</div>
+                  <div style={{ fontSize: 9.5, color: T.textMuted, marginTop: 1 }}>{m.sub}</div>
+                </div>
+              </div>
+              {isOpen && <ExpandPanel T={T} items={m.list} emptyText="None." renderItem={m.renderItem} />}
             </div>
-            <div>
-              <div style={{ fontSize: 20, fontWeight: 800, color: T[m.color] }}>{m.value}</div>
-              <div style={{ fontSize: 10, color: T.textSecondary }}>{m.label}</div>
-              <div style={{ fontSize: 9.5, color: T.textMuted, marginTop: 1 }}>{m.sub}</div>
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {/* ── Needs Attention ───────────────────────────────────────────── */}

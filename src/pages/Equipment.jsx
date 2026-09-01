@@ -27,12 +27,21 @@ export default function Equipment({
   onUpdateAction,
   onDeleteAction,
   onSaveOilChange,
+  initialCode,
+  onCodeChange,
 }) {
   const { T, s } = useTheme();
   const registry = equipmentRegistry || [];
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
-  const [code, setCode] = useState("");
+  const [code, setCode] = useState(initialCode || "");
+
+  // Keep the parent in sync so Back-from-report can restore this same
+  // equipment view instead of re-mounting to a blank search box.
+  function setCodeSynced(c) {
+    setCode(c);
+    if (onCodeChange) onCodeChange(c);
+  }
   const [editingSample, setEditingSample] = useState(null);
   const [editingAction, setEditingAction] = useState(null); // { action, isNew }
   const [savingAction, setSavingAction] = useState(false);
@@ -52,7 +61,7 @@ export default function Equipment({
       );
 
   function selectCode(c) {
-    setCode(c);
+    setCodeSynced(c);
     setQuery("");
     setOpen(false);
   }
@@ -209,7 +218,7 @@ export default function Equipment({
               <button
                 onMouseDown={(e) => {
                   e.preventDefault();
-                  setCode("");
+                  setCodeSynced("");
                 }}
                 style={{
                   position: "absolute",

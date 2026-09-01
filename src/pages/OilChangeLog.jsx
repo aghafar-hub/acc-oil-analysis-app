@@ -40,7 +40,7 @@ export default function OilChangeLog({ oilChanges, actions, equipmentRegistry, o
   const [saving, setSaving] = useState(false);
   const [generating, setGenerating] = useState(false);
 
-  const registry = equipmentRegistry || [];
+  const registry = useMemo(() => equipmentRegistry || [], [equipmentRegistry]);
   const registryByCode = useMemo(() => {
     const map = {};
     registry.forEach((r) => (map[r.code] = r));
@@ -140,6 +140,10 @@ export default function OilChangeLog({ oilChanges, actions, equipmentRegistry, o
     const todayPct = (WINDOW_BACK / WINDOW_TOTAL) * 100;
     const color = urgencyColor(T, days);
     const label = days == null ? "no due date" : days < 0 ? `${Math.abs(days)}d overdue` : days === 0 ? "due today" : `in ${days}d`;
+    // Points near the right edge of the track would otherwise print their
+    // label past the track's own bounds and on top of the row's edit
+    // button — flip the label to the dot's left once it gets close enough.
+    const labelOnLeft = pct > 78;
     return (
       <div style={{ position: "relative", flex: 1, height: 28 }}>
         {[0, 25, 50, 75, 100].map((g) => (
@@ -178,7 +182,7 @@ export default function OilChangeLog({ oilChanges, actions, equipmentRegistry, o
         <span
           style={{
             position: "absolute",
-            left: `calc(${pct}% + 12px)`,
+            ...(labelOnLeft ? { right: `calc(${100 - pct}% + 12px)` } : { left: `calc(${pct}% + 12px)` }),
             top: "50%",
             transform: "translateY(-50%)",
             fontSize: 10,
