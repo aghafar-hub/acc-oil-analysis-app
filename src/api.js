@@ -38,7 +38,15 @@ export class SaveVerificationError extends Error {
 async function getJSON(webhookUrl, params) {
   const url = new URL(webhookUrl);
   Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
-  const res = await fetch(url.toString());
+  // Apps Script Web App GET responses are served through a
+  // content.googleusercontent.com redirect that can cache an identical URL
+  // for a short window — a verify-read run right after a write can come
+  // back with the pre-write response for that same equipment/action
+  // lookup, which then fails write-verification even though the write
+  // actually succeeded. A cache-busting param plus cache: "no-store" makes
+  // every read (not just verification) hit the live sheet, not a cached one.
+  url.searchParams.set("_", Date.now().toString());
+  const res = await fetch(url.toString(), { cache: "no-store" });
   if (!res.ok) throw new Error(`Server returned ${res.status}`);
   const json = await res.json();
   if (json && json.error) throw new Error(json.error);
@@ -72,6 +80,24 @@ function rowsEqual(a, b, { skipIndices, dateIndices } = {}) {
     return false;
   }
   return true;
+}
+
+// Verification failures otherwise give no clue why — this logs exactly
+// which column(s) differed (or that the row wasn't found at all) so a
+// mismatch can be diagnosed from the browser console instead of guessed at.
+function logVerificationMismatch(label, sentRow, savedRow, headers) {
+  if (!savedRow) {
+    console.error(`[${label}] verify-read found no matching row at all.`, { sentRow });
+    return;
+  }
+  const len = Math.max(sentRow.length, savedRow.length);
+  const diffs = [];
+  for (let i = 0; i < len; i++) {
+    const sv = String(sentRow[i] ?? "").trim();
+    const rv = String(savedRow[i] ?? "").trim();
+    if (sv !== rv) diffs.push({ col: i, header: headers?.[i] || `col ${i}`, sent: sv, readBack: rv });
+  }
+  console.error(`[${label}] verify-read mismatch on ${diffs.length} column(s):`, diffs);
 }
 
 // Action Tracker's "Last Modified" column (index 17 — after Closing
@@ -171,6 +197,7 @@ export async function saveAction(webhookUrl, action, { isNew }) {
   const verify = await getEquipmentRows(webhookUrl, action.equipmentCode || action.unitId || "");
   const savedRow = (verify.actions || []).find((r) => String(r[0]).trim() === String(row[0]).trim());
   if (!savedRow || !rowsEqual(savedRow, row, { skipIndices: [ACTION_LAST_MODIFIED_COL], dateIndices: ACTION_DATE_COLS })) {
+    logVerificationMismatch("saveAction", row, savedRow, ACTION_HEADERS);
     throw new SaveVerificationError(
       `The action wasn't confirmed saved to the sheet. It may not have written — please check the Action Tracker tab and try again.`
     );
@@ -203,6 +230,7 @@ export async function saveOilChange(webhookUrl, oilChange) {
   // Only columns 10 (Last Change) and 11 (Next Due) are ever written by the
   // backend for this sheet — see updateRow's special-case in the Apps Script.
   if (!savedRow || !sameCalendarDay(savedRow[9], row[9])) {
+    logVerificationMismatch("saveOilChange", row, savedRow);
     throw new SaveVerificationError(`The oil change wasn't confirmed saved to the sheet — please try again.`);
   }
   return rowToOilChange(savedRow);
@@ -238,6 +266,7 @@ export async function updateSample(webhookUrl, sample) {
   const verify = await getEquipmentRows(webhookUrl, sample.unitId || "");
   const savedRow = (verify.samples || []).find((r) => String(r[2]).trim() === String(matchValues[1]).trim());
   if (!savedRow || !rowsEqual(savedRow, row, { dateIndices: [SAMPLE_DATE_COL] })) {
+    logVerificationMismatch("updateSample", row, savedRow);
     throw new SaveVerificationError(`The sample wasn't confirmed saved to the sheet. It may not have written — please try again.`);
   }
   return rowToSample(savedRow);
