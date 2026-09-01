@@ -23,21 +23,30 @@ function statusColor(T, status) {
   return T.textSecondary;
 }
 
+function daysBetween(dateStr, refMs) {
+  if (!dateStr) return null;
+  const d = new Date(dateStr);
+  if (isNaN(d)) return null;
+  return Math.round((refMs - d.getTime()) / 86400000);
+}
+
+const CONTRACTOR_COLORS = ["#00B4D8", "#B369FF", "#F4A261", "#2DC653"];
+
 export default function Dashboard({ samples, actions, oilChanges, equipmentRegistry, onSelectSample }) {
   const { T, s } = useTheme();
   const [statusFilter, setStatusFilter] = useState("All");
   const [areaFilter, setAreaFilter] = useState("All");
+  const now = Date.now();
 
-  const areas = useMemo(
-    () => ["All", ...Array.from(new Set((equipmentRegistry || []).map((e) => e.area).filter(Boolean)))],
-    [equipmentRegistry]
-  );
-  const areaCodes =
-    areaFilter === "All" ? null : new Set((equipmentRegistry || []).filter((e) => e.area === areaFilter).map((e) => e.code));
+  const registry = useMemo(() => equipmentRegistry || [], [equipmentRegistry]);
+
+  const areas = useMemo(() => ["All", ...Array.from(new Set(registry.map((e) => e.area).filter(Boolean)))], [registry]);
+  const areaCodes = areaFilter === "All" ? null : new Set(registry.filter((e) => e.area === areaFilter).map((e) => e.code));
 
   const scopedSamples = areaCodes ? samples.filter((s2) => areaCodes.has(s2.unitId)) : samples;
   const scopedActions = areaCodes ? actions.filter((a) => areaCodes.has(a.equipmentCode)) : actions;
   const scopedOilChanges = areaCodes ? oilChanges.filter((o) => areaCodes.has(o.equipmentCode)) : oilChanges;
+  const scopedRegistry = areaCodes ? registry.filter((r) => areaCodes.has(r.code)) : registry;
 
   const latestByEquip = useMemo(() => {
     const map = {};
@@ -45,31 +54,29 @@ export default function Dashboard({ samples, actions, oilChanges, equipmentRegis
       if (!sm.unitId) return;
       if (!map[sm.unitId] || new Date(sm.sampledDate) > new Date(map[sm.unitId].sampledDate)) map[sm.unitId] = sm;
     });
-    return Object.values(map);
+    return map;
   }, [scopedSamples]);
+  const latestList = Object.values(latestByEquip);
 
   const openActions = scopedActions.filter((a) => a.status === "Open").length;
-  const inProgress = scopedActions.filter((a) => a.status === "In Progress").length;
-  const overdueOilChanges = scopedOilChanges.filter((o) => o.nextDueDate && new Date(o.nextDueDate) < new Date()).length;
+  const overdueOilChanges = scopedOilChanges.filter((o) => o.status === "Overdue").length;
 
   const statusCounts = {
-    Normal: latestByEquip.filter((d) => d.reportStatus === "Normal").length,
-    Caution: latestByEquip.filter((d) => d.reportStatus === "Caution" || d.reportStatus === "Warning").length,
-    Alert: latestByEquip.filter((d) => d.reportStatus === "Alert").length,
+    Normal: latestList.filter((d) => d.reportStatus === "Normal").length,
+    Caution: latestList.filter((d) => d.reportStatus === "Caution" || d.reportStatus === "Warning").length,
+    Alert: latestList.filter((d) => d.reportStatus === "Alert").length,
   };
   const totalWithStatus = statusCounts.Normal + statusCounts.Caution + statusCounts.Alert || 1;
   const fracNormal = statusCounts.Normal / totalWithStatus;
   const fracCaution = statusCounts.Caution / totalWithStatus;
-
-  const totalEquipment = areaCodes ? areaCodes.size : (equipmentRegistry || []).length;
+  const totalEquipment = areaCodes ? areaCodes.size : registry.length;
 
   const filteredRows =
     statusFilter === "All"
-      ? latestByEquip
-      : latestByEquip.filter((d) =>
+      ? latestList
+      : latestList.filter((d) =>
           statusFilter === "Caution" ? d.reportStatus === "Caution" || d.reportStatus === "Warning" : d.reportStatus === statusFilter
         );
-
   const severityOrder = { Alert: 0, Caution: 1, Warning: 1, Normal: 2 };
   const sortedRows = [...filteredRows].sort((a, b) => (severityOrder[a.reportStatus] ?? 3) - (severityOrder[b.reportStatus] ?? 3));
 
@@ -78,20 +85,164 @@ export default function Dashboard({ samples, actions, oilChanges, equipmentRegis
     [samples]
   );
 
-  const metrics = [
-    { label: "Registered Equipment", value: (equipmentRegistry || []).length, icon: "ti-database", color: T.accent },
-    { label: "Total Samples", value: samples.length, icon: "ti-flask", color: T.accent },
-    { label: "Open Actions", value: openActions, icon: "ti-alert-circle", color: T.danger },
-    { label: "In Progress", value: inProgress, icon: "ti-loader", color: T.warning },
-    { label: "Overdue Oil Changes", value: overdueOilChanges, icon: "ti-oil", color: T.danger },
+  // ── counting cards: real recent-activity windows, not a fabricated
+  // week-over-week delta the app has no stored history to compute ──────
+  const alertSamplesNew7d = scopedSamples.filter(
+    (sm) => sm.reportStatus === "Alert" && (daysBetween(sm.sampledDate, now) ?? 999) <= 7
+  ).length;
+  const openActionsNew7d = scopedActions.filter((a) => a.status === "Open" && (daysBetween(a.revisionDate, now) ?? 999) <= 7).length;
+  const newlyOverdue7d = scopedOilChanges.filter((o) => o.status === "Overdue" && (daysBetween(o.nextDueDate, now) ?? 999) <= 7).length;
+  const closedThisMonth = scopedActions.filter((a) => {
+    if (a.status !== "Closed" || !a.completedDate) return false;
+    const d = new Date(a.completedDate);
+    const t = new Date(now);
+    return !isNaN(d) && d.getMonth() === t.getMonth() && d.getFullYear() === t.getFullYear();
+  }).length;
+
+  const countingCards = [
+    {
+      label: "Alert Samples",
+      value: statusCounts.Alert,
+      sub: alertSamplesNew7d > 0 ? `${alertSamplesNew7d} new in last 7d` : "none new this week",
+      color: "danger",
+      icon: "ti-alert-triangle",
+    },
+    {
+      label: "Open Actions",
+      value: openActions,
+      sub: openActionsNew7d > 0 ? `${openActionsNew7d} opened in last 7d` : "none opened this week",
+      color: "danger",
+      icon: "ti-clipboard-list",
+    },
+    {
+      label: "Overdue Oil Changes",
+      value: overdueOilChanges,
+      sub: newlyOverdue7d > 0 ? `${newlyOverdue7d} newly overdue` : "none newly overdue",
+      color: "warning",
+      icon: "ti-clock-alert",
+    },
+    { label: "Closed This Month", value: closedThisMonth, sub: "actions completed", color: "success", icon: "ti-check" },
   ];
 
-  const trackerSummary = [
-    { label: "Open", value: actions.filter((a) => a.status === "Open").length, color: T.danger },
-    { label: "In Progress", value: actions.filter((a) => a.status === "In Progress").length, color: T.warning },
-    { label: "Waiting Stoppage", value: actions.filter((a) => a.status === "Waiting Stoppage").length, color: T.accent },
-    { label: "Closed", value: actions.filter((a) => a.status === "Closed").length, color: T.success },
-  ];
+  // ── Action Tracker mini summary ───────────────────────────────────
+  const actionStatusCounts = {
+    Open: scopedActions.filter((a) => a.status === "Open").length,
+    "In Progress": scopedActions.filter((a) => a.status === "In Progress").length,
+    "Waiting Stoppage": scopedActions.filter((a) => a.status === "Waiting Stoppage").length,
+    Closed: scopedActions.filter((a) => a.status === "Closed").length,
+  };
+  const oldestOpenAction = scopedActions
+    .filter((a) => a.status !== "Closed" && a.revisionDate)
+    .sort((a, b) => (daysBetween(b.revisionDate, now) ?? -1) - (daysBetween(a.revisionDate, now) ?? -1))[0];
+
+  // ── Oil Change Forecast mini summary ──────────────────────────────
+  const nextDue = scopedOilChanges
+    .filter((o) => o.status !== "Overdue" && o.nextDueDate)
+    .sort((a, b) => new Date(a.nextDueDate) - new Date(b.nextDueDate))[0];
+
+  // ── Contractor performance: on-time oil changes % and action closure
+  // rate %, both computed straight from live data — no assumed SLA. ────
+  const contractorList = Array.from(new Set(scopedRegistry.map((r) => r.contractor).filter(Boolean)));
+  const contractorStats = contractorList.map((c, i) => {
+    const codesForC = new Set(scopedRegistry.filter((r) => r.contractor === c).map((r) => r.code));
+    const pointsForC = scopedOilChanges.filter((o) => codesForC.has(o.equipmentCode));
+    const onTimePct = pointsForC.length
+      ? Math.round((pointsForC.filter((o) => o.status !== "Overdue").length / pointsForC.length) * 100)
+      : null;
+    const actionsForC = scopedActions.filter((a) => a.contractor === c);
+    const closureRatePct = actionsForC.length
+      ? Math.round((actionsForC.filter((a) => a.status === "Closed").length / actionsForC.length) * 100)
+      : null;
+    return {
+      name: c,
+      color: CONTRACTOR_COLORS[i % CONTRACTOR_COLORS.length],
+      onTimePct,
+      closureRatePct,
+      pointCount: pointsForC.length,
+      actionCount: actionsForC.length,
+    };
+  });
+
+  // ── Needs Attention: cross-system insights, computed from live data ──
+  const insights = useMemo(() => {
+    const list = [];
+    scopedRegistry.forEach((reg) => {
+      const latest = latestByEquip[reg.code];
+      const openForEquip = scopedActions.filter((a) => (a.equipmentCode || a.unitId) === reg.code && a.status !== "Closed");
+      const overdueForEquip = scopedOilChanges.filter((o) => o.equipmentCode === reg.code && o.status === "Overdue");
+      const sampleFlagged =
+        latest && (latest.reportStatus === "Alert" || latest.reportStatus === "Caution" || latest.reportStatus === "Warning");
+      const signals = [sampleFlagged, openForEquip.length > 0, overdueForEquip.length > 0].filter(Boolean).length;
+
+      if (signals >= 2) {
+        const tags = [];
+        if (sampleFlagged) tags.push([`${latest.reportStatus} sample`, latest.reportStatus === "Alert" ? "danger" : "warning"]);
+        if (openForEquip.length > 0) {
+          const oldest = Math.max(...openForEquip.map((a) => daysBetween(a.revisionDate, now) ?? 0));
+          tags.push([`Open action · ${oldest}d`, "danger"]);
+        }
+        if (overdueForEquip.length > 0) tags.push([`Oil change overdue`, "warning"]);
+        list.push({
+          key: `risk-${reg.code}`,
+          sev: sampleFlagged && latest.reportStatus === "Alert" ? "danger" : "warning",
+          icon: "ti-alert-triangle",
+          title: `${reg.description || reg.code} — ${reg.code}`,
+          tags,
+          desc: `${signals} of 3 systems flag this equipment — worth checking now instead of separately across pages.`,
+          sample: latest,
+          priority: 3 + signals,
+        });
+      } else if (sampleFlagged && openForEquip.length === 0) {
+        list.push({
+          key: `noaction-${reg.code}`,
+          sev: latest.reportStatus === "Alert" ? "danger" : "warning",
+          icon: "ti-clipboard-x",
+          title: `${reg.code} — ${reg.description || ""}`,
+          tags: [
+            [`${latest.reportStatus} sample`, latest.reportStatus === "Alert" ? "danger" : "warning"],
+            ["No action yet", "warning"],
+          ],
+          desc: `Latest sample came back ${latest.reportStatus} and doesn't have an action raised yet.`,
+          sample: latest,
+          priority: 2,
+        });
+      }
+    });
+
+    // Contractor clustering: 3+ points due (not yet overdue) within 14 days.
+    contractorList.forEach((c) => {
+      const codesForC = new Set(scopedRegistry.filter((r) => r.contractor === c).map((r) => r.code));
+      const soon = scopedOilChanges.filter((o) => {
+        if (!codesForC.has(o.equipmentCode) || o.status === "Overdue") return false;
+        const daysSince = daysBetween(o.nextDueDate, now);
+        if (daysSince == null) return false;
+        const daysUntilDue = -daysSince;
+        return daysUntilDue >= 0 && daysUntilDue <= 14;
+      });
+      if (soon.length >= 3) {
+        list.push({
+          key: `bundle-${c}`,
+          sev: "accent",
+          icon: "ti-users",
+          title: `${c} has ${soon.length} points due within 2 weeks`,
+          tags: [
+            [c, "accent"],
+            [`${soon.length} points`, "warning"],
+          ],
+          desc: `${soon
+            .slice(0, 4)
+            .map((o) => o.equipmentCode)
+            .join(", ")} are all due for ${c} within the next 2 weeks — bundling into one visit instead of separate call-outs.`,
+          sample: null,
+          priority: 1,
+        });
+      }
+    });
+
+    return list.sort((a, b) => b.priority - a.priority).slice(0, 6);
+  }, [scopedRegistry, scopedActions, scopedOilChanges, latestByEquip, contractorList, now]);
+
+  const insightSevColor = { danger: T.danger, warning: T.warning, accent: T.accent };
 
   return (
     <div>
@@ -105,7 +256,7 @@ export default function Dashboard({ samples, actions, oilChanges, equipmentRegis
       <p style={{ ...s.sectionTitle, margin: "0 0 8px" }}>Dashboard</p>
 
       {areas.length > 1 && (
-        <div style={{ display: "flex", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
+        <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
           {areas.map((a) => (
             <button
               key={a}
@@ -124,21 +275,22 @@ export default function Dashboard({ samples, actions, oilChanges, equipmentRegis
         </div>
       )}
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(140px,1fr))", gap: 12, marginBottom: 20 }}>
-        {metrics.map((m) => (
-          <div key={m.label} style={s.metricCard}>
-            <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 6 }}>
-              <i className={`ti ${m.icon}`} style={{ color: m.color, fontSize: 18 }} aria-hidden="true" />
-              <span style={{ fontSize: 11, color: T.textSecondary, lineHeight: 1.3 }}>{m.label}</span>
-            </div>
-            <div style={{ fontSize: 28, fontWeight: 800, color: m.color }}>{m.value}</div>
-          </div>
-        ))}
-      </div>
-
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 20 }}>
-        <div style={{ ...s.card, display: "flex", alignItems: "center", gap: 20, flexWrap: "wrap" }}>
-          <svg width="120" height="120" viewBox="0 0 120 120">
+      {/* ── Systems Overview ──────────────────────────────────────────── */}
+      <p
+        style={{
+          fontSize: 12,
+          fontWeight: 700,
+          textTransform: "uppercase",
+          letterSpacing: 0.5,
+          color: T.textSecondary,
+          margin: "0 0 12px",
+        }}
+      >
+        Systems Overview
+      </p>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(280px,1fr))", gap: 14, marginBottom: 14 }}>
+        <div style={{ ...s.card, display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap", marginBottom: 0 }}>
+          <svg width="100" height="100" viewBox="0 0 120 120">
             {totalWithStatus > 0 && (
               <>
                 <path d={arcPath(0, fracNormal, 54, 60, 60)} fill={T.success} opacity="0.9" />
@@ -158,8 +310,10 @@ export default function Dashboard({ samples, actions, oilChanges, equipmentRegis
               equipment
             </text>
           </svg>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 13, fontWeight: 600, color: T.textPrimary, marginBottom: 10 }}>Equipment Status</div>
+          <div style={{ flex: 1, minWidth: 140 }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+              <span style={{ fontSize: 13, fontWeight: 700, color: T.textPrimary }}>Equipment Health</span>
+            </div>
             {[
               { label: "Normal", count: statusCounts.Normal, color: T.success, status: "Normal" },
               { label: "Caution", count: statusCounts.Caution, color: T.warning, status: "Caution" },
@@ -172,46 +326,242 @@ export default function Dashboard({ samples, actions, oilChanges, equipmentRegis
                   display: "flex",
                   alignItems: "center",
                   gap: 8,
-                  marginBottom: 8,
+                  marginBottom: 7,
                   cursor: "pointer",
                   opacity: statusFilter !== "All" && statusFilter !== d.status ? 0.4 : 1,
                 }}
               >
-                <div style={{ width: 10, height: 10, borderRadius: "50%", background: d.color, flexShrink: 0 }} />
-                <div style={{ flex: 1, height: 8, borderRadius: 4, background: T.border, overflow: "hidden" }}>
+                <div style={{ width: 9, height: 9, borderRadius: "50%", background: d.color, flexShrink: 0 }} />
+                <div style={{ flex: 1, height: 6, borderRadius: 4, background: T.border, overflow: "hidden" }}>
                   <div style={{ width: `${(d.count / totalWithStatus) * 100}%`, height: "100%", background: d.color, borderRadius: 4 }} />
                 </div>
-                <span style={{ fontSize: 12, fontWeight: 700, color: d.color, minWidth: 20 }}>{d.count}</span>
-                <span style={{ fontSize: 11, color: T.textSecondary }}>{d.label}</span>
+                <span style={{ fontSize: 11.5, fontWeight: 700, color: d.color, minWidth: 18, textAlign: "right" }}>{d.count}</span>
               </div>
             ))}
           </div>
         </div>
 
-        <div style={s.card}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: T.textPrimary, marginBottom: 12 }}>Action Tracker Summary</div>
-          {trackerSummary.map((d) => (
-            <div
-              key={d.label}
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                padding: "8px 0",
-                borderBottom: `1px solid ${T.border2}`,
-              }}
-            >
-              <span style={{ fontSize: 12, color: T.textSecondary }}>{d.label}</span>
-              <span style={{ fontSize: 14, fontWeight: 700, color: d.color }}>{d.value}</span>
+        <div style={{ ...s.card, marginBottom: 0 }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: T.textPrimary, marginBottom: 12 }}>Action Tracker</div>
+          <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+            {Object.entries(actionStatusCounts).map(([label, n]) => (
+              <div
+                key={label}
+                style={{
+                  flex: 1,
+                  textAlign: "center",
+                  background: T.cardSubBg,
+                  border: `1px solid ${T.border2}`,
+                  borderRadius: 8,
+                  padding: "7px 3px",
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: 15,
+                    fontWeight: 800,
+                    color: T[{ Open: "danger", "In Progress": "warning", "Waiting Stoppage": "accent", Closed: "success" }[label]],
+                  }}
+                >
+                  {n}
+                </div>
+                <div style={{ fontSize: 8.5, color: T.textMuted, marginTop: 2, textTransform: "uppercase" }}>{label}</div>
+              </div>
+            ))}
+          </div>
+          {oldestOpenAction ? (
+            <div style={{ fontSize: 11.5, color: T.textSecondary, display: "flex", alignItems: "center", gap: 6 }}>
+              <i className="ti ti-clock-alert" style={{ color: T.danger }} aria-hidden="true" />
+              Oldest open: <b style={{ color: T.danger, fontFamily: "monospace" }}>{oldestOpenAction.equipmentCode}</b>
+              <span>· {daysBetween(oldestOpenAction.revisionDate, now)}d</span>
             </div>
-          ))}
-          <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", marginTop: 2 }}>
-            <span style={{ fontSize: 12, fontWeight: 600, color: T.textPrimary }}>Total</span>
-            <span style={{ fontSize: 14, fontWeight: 800, color: T.textPrimary }}>{actions.length}</span>
+          ) : (
+            <div style={{ fontSize: 11.5, color: T.textMuted }}>No open actions.</div>
+          )}
+        </div>
+
+        <div style={{ ...s.card, marginBottom: 0 }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: T.textPrimary, marginBottom: 12 }}>Oil Change Forecast</div>
+          <div style={{ fontSize: 20, fontWeight: 800, color: overdueOilChanges > 0 ? T.danger : T.success }}>
+            {overdueOilChanges} <span style={{ fontSize: 11, fontWeight: 600, color: T.textSecondary }}>overdue</span>
+          </div>
+          <div style={{ fontSize: 11.5, color: T.textSecondary, marginTop: 8 }}>
+            {nextDue ? (
+              <>
+                Next due: <b style={{ color: T.textPrimary, fontFamily: "monospace" }}>{nextDue.equipmentCode}</b> —{" "}
+                {formatDate(nextDue.nextDueDate)}
+              </>
+            ) : (
+              "Nothing else due soon."
+            )}
           </div>
         </div>
       </div>
 
+      {contractorStats.length > 0 && (
+        <div style={{ ...s.card, marginBottom: 20 }}>
+          <div style={{ fontSize: 13.5, fontWeight: 700, color: T.textPrimary, marginBottom: 16 }}>Contractor Performance</div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(240px,1fr))", gap: 22 }}>
+            {[
+              ["On-Time Oil Changes", "onTimePct"],
+              ["Action Closure Rate", "closureRatePct"],
+            ].map(([label, key]) => {
+              const withData = contractorStats.filter((c) => c[key] != null);
+              const winner = withData.length > 1 ? withData.reduce((a, b) => (b[key] > a[key] ? b : a)) : null;
+              return (
+                <div
+                  key={label}
+                  style={{ background: T.cardSubBg, border: `1px solid ${T.border2}`, borderRadius: 10, padding: "12px 14px" }}
+                >
+                  <div style={{ fontSize: 12, fontWeight: 700, color: T.textPrimary, marginBottom: 10 }}>
+                    {label}
+                    {winner && (
+                      <span
+                        style={{
+                          fontSize: 10,
+                          fontWeight: 800,
+                          color: "#fff",
+                          background: winner.color,
+                          borderRadius: 999,
+                          padding: "2px 8px",
+                          marginLeft: 8,
+                        }}
+                      >
+                        {winner.name} leads
+                      </span>
+                    )}
+                  </div>
+                  {contractorStats.map((c) => (
+                    <div key={c.name} style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+                      <span style={{ width: 44, fontSize: 11, fontWeight: 800, color: c.color, flexShrink: 0 }}>{c.name}</span>
+                      <span style={{ flex: 1, height: 14, borderRadius: 999, background: T.border, overflow: "hidden" }}>
+                        <span
+                          style={{ display: "block", height: "100%", width: `${c[key] ?? 0}%`, borderRadius: 999, background: c.color }}
+                        />
+                      </span>
+                      <span style={{ width: 40, fontSize: 12.5, fontWeight: 800, color: c.color, textAlign: "right", flexShrink: 0 }}>
+                        {c[key] == null ? "—" : `${c[key]}%`}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* ── counting cards ────────────────────────────────────────────── */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(190px,1fr))", gap: 12, marginBottom: 20 }}>
+        {countingCards.map((m) => (
+          <div key={m.label} style={{ ...s.metricCard, display: "flex", alignItems: "center", gap: 12 }}>
+            <div
+              style={{
+                width: 32,
+                height: 32,
+                borderRadius: 9,
+                background: T[m.color] + "2A",
+                color: T[m.color],
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                flexShrink: 0,
+              }}
+            >
+              <i className={`ti ${m.icon}`} style={{ fontSize: 16 }} aria-hidden="true" />
+            </div>
+            <div>
+              <div style={{ fontSize: 20, fontWeight: 800, color: T[m.color] }}>{m.value}</div>
+              <div style={{ fontSize: 10, color: T.textSecondary }}>{m.label}</div>
+              <div style={{ fontSize: 9.5, color: T.textMuted, marginTop: 1 }}>{m.sub}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* ── Needs Attention ───────────────────────────────────────────── */}
+      <p
+        style={{
+          fontSize: 12,
+          fontWeight: 700,
+          textTransform: "uppercase",
+          letterSpacing: 0.5,
+          color: T.textSecondary,
+          margin: "0 0 12px",
+        }}
+      >
+        Needs Attention
+      </p>
+      <div style={{ marginBottom: 20 }}>
+        {insights.length === 0 && (
+          <div style={{ ...s.card, textAlign: "center", padding: 24, color: T.textMuted, fontSize: 13 }}>
+            Nothing flagged across samples, actions, and oil changes right now.
+          </div>
+        )}
+        {insights.map((ins) => (
+          <div
+            key={ins.key}
+            style={{
+              ...s.card,
+              marginBottom: 10,
+              display: "flex",
+              alignItems: "flex-start",
+              gap: 14,
+              borderLeft: `3px solid ${insightSevColor[ins.sev]}`,
+              padding: "14px 16px",
+            }}
+          >
+            <div
+              style={{
+                width: 34,
+                height: 34,
+                borderRadius: 9,
+                background: insightSevColor[ins.sev] + "2A",
+                color: insightSevColor[ins.sev],
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                flexShrink: 0,
+              }}
+            >
+              <i className={`ti ${ins.icon}`} style={{ fontSize: 16 }} aria-hidden="true" />
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: T.textHighlight }}>{ins.title}</div>
+              <div style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
+                {ins.tags.map(([t, c]) => (
+                  <span
+                    key={t}
+                    style={{ fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 999, background: T[c] + "22", color: T[c] }}
+                  >
+                    {t}
+                  </span>
+                ))}
+              </div>
+              <div style={{ fontSize: 12, color: T.textSecondary, marginTop: 6, lineHeight: 1.5 }}>{ins.desc}</div>
+            </div>
+            {ins.sample && onSelectSample && (
+              <button style={{ ...s.btn, flexShrink: 0 }} onClick={() => onSelectSample(ins.sample)}>
+                View Report
+              </button>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {/* ── Equipment Status ──────────────────────────────────────────── */}
+      <p
+        style={{
+          fontSize: 12,
+          fontWeight: 700,
+          textTransform: "uppercase",
+          letterSpacing: 0.5,
+          color: T.textSecondary,
+          margin: "0 0 12px",
+        }}
+      >
+        Equipment Status
+      </p>
       <div style={{ ...s.card, padding: 0 }}>
         <div
           style={{
@@ -224,7 +574,7 @@ export default function Dashboard({ samples, actions, oilChanges, equipmentRegis
             gap: 8,
           }}
         >
-          <span style={{ fontWeight: 600, color: T.textPrimary, fontSize: 13 }}>Equipment Status — Latest Sample</span>
+          <span style={{ fontWeight: 600, color: T.textPrimary, fontSize: 13 }}>Latest Sample per Equipment</span>
           <div style={{ display: "flex", gap: 6 }}>
             {["All", "Normal", "Caution", "Alert"].map((d) => (
               <button
