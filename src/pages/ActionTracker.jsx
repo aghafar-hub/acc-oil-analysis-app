@@ -6,14 +6,44 @@ import EditActionModal from "../components/EditActionModal";
 import GenerateMonthlyActionsModal from "../components/GenerateMonthlyActionsModal";
 
 const STATUS_COLOR_KEY = { Open: "danger", "In Progress": "warning", "Waiting Stoppage": "accent", Closed: "success" };
+const COLUMNS = ["Open", "In Progress", "Waiting Stoppage", "Closed"];
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
-// This page renders its own accordion grouped-by-equipment view rather than
-// reusing <LastActionsPanel>, but it is wired to the exact same `actions`
-// array and the exact same onAddAction/onUpdateAction/onDeleteAction
-// callbacks that the Oil Analysis Report page uses (both passed down from
-// App's lifted state) — that shared wiring, plus the verified writes in
-// api.js, is what actually fixes the original sync bug.
+// SVG donut-slice path — same math Dashboard.jsx's own status donut uses.
+function arcPath(startFrac, fracLen, radius, cx, cy) {
+  if (fracLen <= 0) return "";
+  const start = startFrac * 2 * Math.PI - Math.PI / 2;
+  const end = (startFrac + fracLen) * 2 * Math.PI - Math.PI / 2;
+  const x1 = cx + radius * Math.cos(start);
+  const y1 = cy + radius * Math.sin(start);
+  const x2 = cx + radius * Math.cos(end);
+  const y2 = cy + radius * Math.sin(end);
+  const largeArc = fracLen > 0.5 ? 1 : 0;
+  return `M ${cx} ${cy} L ${x1} ${y1} A ${radius} ${radius} 0 ${largeArc} 1 ${x2} ${y2} Z`;
+}
+
+function ageDays(dateStr) {
+  if (!dateStr) return null;
+  const d = new Date(dateStr);
+  if (isNaN(d)) return null;
+  return Math.round((Date.now() - d.getTime()) / 86400000);
+}
+function ageColor(T, days) {
+  if (days == null) return T.textMuted;
+  if (days > 14) return T.danger;
+  if (days >= 7) return T.warning;
+  return T.success;
+}
+
+// This page renders a Kanban board grouped by status rather than
+// EQUIPMENT — Equipment's own tab already shows one equipment's full
+// action history in context, so this page's job is cross-equipment triage:
+// what's open, what's aging, what needs a decision today. It is wired to
+// the exact same `actions` array and the exact same
+// onAddAction/onUpdateAction/onDeleteAction callbacks the Oil Analysis
+// Report page uses (both passed down from App's lifted state) — that
+// shared wiring, plus the verified writes in api.js, is what actually
+// fixes the original sync bug.
 export default function ActionTracker({
   actions,
   samples,
@@ -28,61 +58,61 @@ export default function ActionTracker({
   const [equipCode, setEquipCode] = useState("");
   const [month, setMonth] = useState("All");
   const [year, setYear] = useState("All");
-  const [statusFilter, setStatusFilter] = useState("All");
   const [areaFilter, setAreaFilter] = useState("All");
-  const [expanded, setExpanded] = useState(null);
+  const [contractorFilter, setContractorFilter] = useState("All");
   const [editing, setEditing] = useState(null);
   const [saving, setSaving] = useState(false);
   const [generating, setGenerating] = useState(false);
+  const [draggedId, setDraggedId] = useState(null);
+  const [dragOverCol, setDragOverCol] = useState(null);
 
   const registry = equipmentRegistry || [];
+  const registryByCode = useMemo(() => {
+    const map = {};
+    registry.forEach((r) => (map[r.code] = r));
+    return map;
+  }, [registry]);
   const areas = ["All", ...Array.from(new Set(registry.map((r) => r.area).filter(Boolean)))];
+  const contractors = ["All", ...Array.from(new Set(registry.map((r) => r.contractor).filter(Boolean)))];
   const years = [
     "All",
     ...Array.from(
       new Set(actions.map((a) => (a.revisionDate ? new Date(a.revisionDate).getFullYear().toString() : null)).filter(Boolean))
     ).sort((a, b) => b - a),
   ];
-  const hasDateFilter = month !== "All" || year !== "All";
 
-  function matchesFilter(a) {
+  function matchesFilters(a) {
+    const code = a.equipmentCode || a.unitId || "";
+    if (equipCode && code !== equipCode) return false;
+    const reg = registryByCode[code];
+    if (areaFilter !== "All" && reg?.area !== areaFilter) return false;
+    if (contractorFilter !== "All" && reg?.contractor !== contractorFilter) return false;
     const d = a.revisionDate ? new Date(a.revisionDate) : null;
     if (month !== "All" && (!d || d.getMonth() !== parseInt(month, 10))) return false;
     if (year !== "All" && (!d || d.getFullYear().toString() !== year)) return false;
-    if (statusFilter !== "All" && a.status !== statusFilter) return false;
     return true;
   }
 
-  const byEquip = useMemo(() => {
-    const map = {};
-    actions.forEach((a) => {
-      const code = a.equipmentCode || a.unitId || "—";
-      (map[code] ||= []).push(a);
-    });
-    Object.values(map).forEach((list) => list.sort((a, b) => new Date(b.revisionDate || 0) - new Date(a.revisionDate || 0)));
-    return map;
-  }, [actions]);
+  const hasFilters = equipCode || areaFilter !== "All" || contractorFilter !== "All" || month !== "All" || year !== "All";
+  const visible = actions.filter(matchesFilters);
 
-  const areaCodes = areaFilter === "All" ? null : new Set(registry.filter((r) => r.area === areaFilter).map((r) => r.code));
+  const statusCounts = COLUMNS.reduce((acc, st) => ({ ...acc, [st]: actions.filter((a) => a.status === st).length }), {});
+  const totalActions = actions.length || 1;
+  let acc = 0;
+  const donutArcs = COLUMNS.map((st) => {
+    const frac = statusCounts[st] / totalActions;
+    const path = arcPath(acc, frac, 44, 50, 50);
+    acc += frac;
+    return { st, path };
+  });
 
-  let equipCodes = Object.keys(byEquip).sort();
-  if (equipCode) equipCodes = equipCodes.filter((c) => c === equipCode);
-  if (areaCodes) equipCodes = equipCodes.filter((c) => areaCodes.has(c));
-
-  const statusCounts = {
-    Open: actions.filter((a) => a.status === "Open").length,
-    "In Progress": actions.filter((a) => a.status === "In Progress").length,
-    "Waiting Stoppage": actions.filter((a) => a.status === "Waiting Stoppage").length,
-    Closed: actions.filter((a) => a.status === "Closed").length,
-  };
-
-  const visibleList = (code) => {
-    const list = byEquip[code] || [];
-    return hasDateFilter || statusFilter !== "All" ? list.filter(matchesFilter) : list;
-  };
-  const visibleCodes = equipCodes.filter((code) =>
-    hasDateFilter || statusFilter !== "All" ? visibleList(code).length > 0 : (byEquip[code] || []).length > 0
-  );
+  function columnItems(status) {
+    const list = visible.filter((a) => a.status === status);
+    if (status === "Closed") {
+      return list.sort((x, y) => new Date(y.completedDate || y.revisionDate || 0) - new Date(x.completedDate || x.revisionDate || 0));
+    }
+    return list.sort((x, y) => (ageDays(y.revisionDate) ?? -1) - (ageDays(x.revisionDate) ?? -1));
+  }
 
   async function handleSave(updated) {
     setSaving(true);
@@ -109,33 +139,67 @@ export default function ActionTracker({
     }
   }
 
+  async function handleDrop(newStatus) {
+    setDragOverCol(null);
+    const action = actions.find((a) => a._id === draggedId);
+    setDraggedId(null);
+    if (!action || action.status === newStatus) return;
+    const equipCodeVal = action.equipmentCode || action.unitId || "";
+    const payload = {
+      ...action,
+      status: newStatus,
+      equipmentCode: equipCodeVal,
+      // Mirrors EditActionModal's own save rule: a Closing Comment only
+      // makes sense once the action is actually Closed.
+      closingComment: newStatus === "Closed" ? action.closingComment || "" : "",
+      _matchCols: action._matchCols || [0, 1],
+      _matchValues: action._matchValues || [action.acNo, equipCodeVal],
+    };
+    try {
+      await onUpdateAction(payload);
+    } catch {
+      // toast already shown by App
+    }
+  }
+
   return (
     <div>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(110px,1fr))", gap: 10, marginBottom: 20 }}>
-        {Object.entries(statusCounts).map(([label, count]) => (
-          <div
-            key={label}
-            style={{
-              ...s.card,
-              textAlign: "center",
-              padding: "10px 8px",
-              cursor: "pointer",
-              border: `2px solid ${statusFilter === label ? T[STATUS_COLOR_KEY[label]] : "transparent"}`,
-              marginBottom: 0,
-            }}
-            onClick={() => setStatusFilter((f) => (f === label ? "All" : label))}
-          >
-            <div style={{ fontSize: 24, fontWeight: 800, color: T[STATUS_COLOR_KEY[label]] }}>{count}</div>
-            <div style={{ fontSize: 10, color: T.textSecondary, marginTop: 2 }}>{label}</div>
-          </div>
-        ))}
-        <div style={{ ...s.card, textAlign: "center", padding: "10px 8px", marginBottom: 0 }}>
-          <div style={{ fontSize: 24, fontWeight: 800, color: T.textSecondary }}>{actions.length}</div>
-          <div style={{ fontSize: 10, color: T.textSecondary, marginTop: 2 }}>Total</div>
+      <div style={{ ...s.card, display: "flex", alignItems: "center", gap: 24, flexWrap: "wrap", padding: "16px 20px" }}>
+        <svg width="100" height="100" viewBox="0 0 100 100">
+          {donutArcs.map(({ st, path }) => path && <path key={st} d={path} fill={T[STATUS_COLOR_KEY[st]]} opacity="0.92" />)}
+          <circle cx="50" cy="50" r="29" fill={T.cardBg} />
+          <text x="50" y="47" textAnchor="middle" fontSize="17" fontWeight="800" fill={T.textPrimary}>
+            {actions.length}
+          </text>
+          <text x="50" y="61" textAnchor="middle" fontSize="8" fill={T.textSecondary}>
+            actions
+          </text>
+        </svg>
+        <div style={{ flex: 1, minWidth: 220 }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: T.textPrimary, marginBottom: 10 }}>Status Breakdown</div>
+          {COLUMNS.map((st) => (
+            <div key={st} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 7 }}>
+              <span style={{ width: 9, height: 9, borderRadius: "50%", background: T[STATUS_COLOR_KEY[st]], flexShrink: 0 }} />
+              <span style={{ fontSize: 11, color: T.textSecondary, width: 108, flexShrink: 0 }}>{st}</span>
+              <div style={{ flex: 1, height: 7, borderRadius: 4, background: T.border, overflow: "hidden" }}>
+                <div
+                  style={{
+                    width: `${(statusCounts[st] / totalActions) * 100}%`,
+                    height: "100%",
+                    background: T[STATUS_COLOR_KEY[st]],
+                    borderRadius: 4,
+                  }}
+                />
+              </div>
+              <span style={{ fontSize: 12, fontWeight: 700, color: T[STATUS_COLOR_KEY[st]], minWidth: 18, textAlign: "right" }}>
+                {statusCounts[st]}
+              </span>
+            </div>
+          ))}
         </div>
       </div>
 
-      <div style={{ display: "flex", gap: 10, marginBottom: 16, flexWrap: "wrap", alignItems: "center" }}>
+      <div style={{ display: "flex", gap: 10, margin: "16px 0", flexWrap: "wrap", alignItems: "center" }}>
         <EquipmentSearch
           options={registry}
           value={equipCode || "All"}
@@ -157,19 +221,6 @@ export default function ActionTracker({
             <option key={y}>{y}</option>
           ))}
         </select>
-        {(equipCode || month !== "All" || year !== "All" || statusFilter !== "All") && (
-          <button
-            style={{ ...s.btn, fontSize: 12, color: T.danger, borderColor: T.danger }}
-            onClick={() => {
-              setEquipCode("");
-              setMonth("All");
-              setYear("All");
-              setStatusFilter("All");
-            }}
-          >
-            <i className="ti ti-x" aria-hidden="true" /> Clear
-          </button>
-        )}
         {areas.length > 1 &&
           areas.map((a) => (
             <button
@@ -186,6 +237,36 @@ export default function ActionTracker({
               {a}
             </button>
           ))}
+        {contractors.length > 1 &&
+          contractors.map((c) => (
+            <button
+              key={c}
+              style={{
+                ...s.btn,
+                fontSize: 12,
+                background: contractorFilter === c ? T.accent : "transparent",
+                color: contractorFilter === c ? T.accentText : T.textSecondary,
+                borderColor: contractorFilter === c ? T.accent : T.border,
+              }}
+              onClick={() => setContractorFilter(c)}
+            >
+              {c}
+            </button>
+          ))}
+        {hasFilters && (
+          <button
+            style={{ ...s.btn, fontSize: 12, color: T.danger, borderColor: T.danger }}
+            onClick={() => {
+              setEquipCode("");
+              setMonth("All");
+              setYear("All");
+              setAreaFilter("All");
+              setContractorFilter("All");
+            }}
+          >
+            <i className="ti ti-x" aria-hidden="true" /> Clear
+          </button>
+        )}
         <button style={{ ...s.btn, marginLeft: "auto" }} onClick={() => setGenerating(true)}>
           <i className="ti ti-calendar-plus" aria-hidden="true" /> Generate Monthly Actions
         </button>
@@ -195,73 +276,140 @@ export default function ActionTracker({
       </div>
 
       <div style={{ fontSize: 11, color: T.textMuted, marginBottom: 10 }}>
-        {hasDateFilter || statusFilter !== "All"
-          ? `Showing ${visibleCodes.reduce((n, c) => n + visibleList(c).length, 0)} actions across ${visibleCodes.length} equipment`
-          : `${visibleCodes.length} equipment · showing latest action per equipment · tap to expand all`}
+        {hasFilters
+          ? `Showing ${visible.length} of ${actions.length} actions`
+          : `${actions.length} actions · drag a card to change its status`}
       </div>
 
-      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-        {visibleCodes.length === 0 && (
-          <div style={{ ...s.card, textAlign: "center", padding: 30, color: T.textMuted, fontSize: 13 }}>
-            No actions match the current filters.
-          </div>
-        )}
-        {visibleCodes.map((code) => {
-          const full = byEquip[code] || [];
-          const list = visibleList(code);
-          const latest = (hasDateFilter || statusFilter !== "All" ? list : full)[0];
-          const isOpen = expanded === code;
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4,minmax(230px,1fr))", gap: 14, overflowX: "auto" }}>
+        {COLUMNS.map((status) => {
+          const items = columnItems(status);
+          const isDragOver = dragOverCol === status;
           return (
-            <div key={code} style={{ ...s.card, borderLeft: `3px solid ${T[STATUS_COLOR_KEY[latest.status]] || T.border}` }}>
+            <div
+              key={status}
+              onDragOver={(e) => {
+                e.preventDefault();
+                setDragOverCol(status);
+              }}
+              onDragLeave={() => setDragOverCol((c) => (c === status ? null : c))}
+              onDrop={(e) => {
+                e.preventDefault();
+                handleDrop(status);
+              }}
+              style={{
+                borderRadius: 10,
+                background: isDragOver ? T.navActive : "transparent",
+                minHeight: 60,
+                transition: "background 0.12s",
+              }}
+            >
               <div
-                style={{ display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer" }}
-                onClick={() => setExpanded(isOpen ? null : code)}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  padding: "4px 4px 10px",
+                  borderBottom: `2px solid ${T[STATUS_COLOR_KEY[status]]}`,
+                  marginBottom: 10,
+                }}
               >
-                <div>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <strong>{code}</strong>
-                    <span style={s.badge(latest.status)}>{latest.status || "—"}</span>
-                  </div>
-                  <div style={{ fontSize: 13, marginTop: 4 }}>{latest.agreedAction || "—"}</div>
-                  <div style={{ fontSize: 12, color: T.textSecondary, marginTop: 2 }}>{latest.description}</div>
-                </div>
-                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                  <span style={{ fontSize: 12, color: T.textSecondary }}>{full.length}</span>
-                  <i className={`ti ${isOpen ? "ti-chevron-up" : "ti-chevron-down"}`} aria-hidden="true" />
-                </div>
+                <span
+                  style={{
+                    fontSize: 12,
+                    fontWeight: 700,
+                    color: T[STATUS_COLOR_KEY[status]],
+                    textTransform: "uppercase",
+                    letterSpacing: 0.4,
+                  }}
+                >
+                  {status}
+                </span>
+                <span style={{ fontSize: 12, color: T.textMuted, fontWeight: 600 }}>{items.length}</span>
               </div>
 
-              {isOpen && (
-                <table style={{ ...s.table, fontSize: 12, marginTop: 14 }}>
-                  <thead>
-                    <tr>
-                      {["Ac.No", "Revision Date", "Status", "Agreed Action", "Completed Date", ""].map((h) => (
-                        <th key={h} style={s.th}>
-                          {h}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {full.map((a) => (
-                      <tr key={a._id}>
-                        <td style={{ ...s.td, fontFamily: "monospace" }}>{a.acNo}</td>
-                        <td style={s.td}>{formatDate(a.revisionDate)}</td>
-                        <td style={s.td}>
-                          <span style={{ color: T[STATUS_COLOR_KEY[a.status]] || T.textSecondary }}>{a.status}</span>
-                        </td>
-                        <td style={s.td}>{a.agreedAction || "—"}</td>
-                        <td style={s.td}>{formatDate(a.completedDate)}</td>
-                        <td style={s.td}>
-                          <button style={{ ...s.btn, padding: "3px 7px" }} onClick={() => setEditing({ action: a, isNew: false })}>
-                            <i className="ti ti-edit" aria-hidden="true" />
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+              {items.length === 0 && (
+                <div
+                  style={{
+                    fontSize: 11.5,
+                    color: T.textMuted,
+                    textAlign: "center",
+                    padding: "16px 6px",
+                    border: `1px dashed ${T.border}`,
+                    borderRadius: 8,
+                  }}
+                >
+                  No actions here
+                </div>
               )}
+
+              {items.map((a) => {
+                const code = a.equipmentCode || a.unitId || "";
+                const reg = registryByCode[code];
+                const days = ageDays(a.revisionDate);
+                return (
+                  <div
+                    key={a._id}
+                    draggable
+                    onDragStart={() => setDraggedId(a._id)}
+                    onDragEnd={() => setDraggedId(null)}
+                    onClick={() => setEditing({ action: a, isNew: false })}
+                    style={{
+                      ...s.card,
+                      marginBottom: 10,
+                      padding: "12px 13px",
+                      borderLeft: `3px solid ${T[STATUS_COLOR_KEY[status]]}`,
+                      cursor: "grab",
+                      opacity: draggedId === a._id ? 0.4 : 1,
+                    }}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6 }}>
+                      <span style={{ fontFamily: "monospace", fontWeight: 700, fontSize: 12.5, color: T.accent }}>{code}</span>
+                      {reg?.area && (
+                        <span
+                          style={{ fontSize: 9.5, fontWeight: 700, color: T.textMuted, textTransform: "uppercase", letterSpacing: 0.3 }}
+                        >
+                          {reg.area}
+                        </span>
+                      )}
+                    </div>
+                    <div style={{ fontSize: 11, color: T.textSecondary, marginTop: 2 }}>{a.description || "—"}</div>
+                    <div
+                      style={{
+                        fontSize: 12,
+                        color: T.textPrimary,
+                        marginTop: 8,
+                        lineHeight: 1.45,
+                        display: "-webkit-box",
+                        WebkitLineClamp: 2,
+                        WebkitBoxOrient: "vertical",
+                        overflow: "hidden",
+                      }}
+                    >
+                      {a.agreedAction || "—"}
+                    </div>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 10 }}>
+                      {status === "Closed" ? (
+                        <span style={{ fontSize: 10.5, color: T.textMuted }}>Completed {formatDate(a.completedDate) || "—"}</span>
+                      ) : (
+                        <span
+                          style={{
+                            fontSize: 10.5,
+                            fontWeight: 700,
+                            padding: "2px 8px",
+                            borderRadius: 20,
+                            background: ageColor(T, days) + "22",
+                            color: ageColor(T, days),
+                          }}
+                        >
+                          {days == null ? "—" : `${days}d open`}
+                        </span>
+                      )}
+                      <span style={{ fontSize: 10.5, fontFamily: "monospace", color: T.textMuted }}>{a.acNo}</span>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           );
         })}
