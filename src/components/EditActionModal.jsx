@@ -79,8 +79,19 @@ export default function EditActionModal({
   // immediately; editing an existing action leaves its saved values alone
   // until the user actively re-selects equipment. Action Tracker's own "Add
   // Action" always starts with an empty equipment code, so neither applies.
+  //
+  // Revision Date, Last Change Date, and Completed Date all render through
+  // <input type="date">, which silently shows blank for anything not in
+  // ISO format — an existing action's saved date comes in as "26 Mar 2026"
+  // (rowToAction's own display format), so it has to be converted here or
+  // every one of these fields looks empty the moment you reopen a real,
+  // already-saved action. Sample Date is a <select> of literal date-string
+  // options instead, so it's deliberately left alone.
   const [form, setForm] = useState(() => {
     const base = { ...action };
+    base.revisionDate = toISODate(base.revisionDate);
+    base.lastChange = toISODate(base.lastChange);
+    base.completedDate = toISODate(base.completedDate);
     if (isNew && (base.equipmentCode || base.unitId)) {
       const filled = autofillFromEquipment(base.equipmentCode || base.unitId, deps);
       return { ...base, ...filled };
