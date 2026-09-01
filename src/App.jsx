@@ -466,7 +466,15 @@ function AppShell({ config, setConfig }) {
               onDeleteAction={onDeleteAction}
             />
           )}
-          {page === "oilchange" && <OilChangeLog oilChanges={oilChanges} equipmentRegistry={equipmentRegistry} onSave={onSaveOilChange} />}
+          {page === "oilchange" && (
+            <OilChangeLog
+              oilChanges={oilChanges}
+              actions={actions}
+              equipmentRegistry={equipmentRegistry}
+              onSave={onSaveOilChange}
+              onAddAction={onAddAction}
+            />
+          )}
           {page === "tracker" && <SampleTracker trackerRaw={trackerRaw} oilChanges={oilChanges} equipmentRegistry={equipmentRegistry} />}
           {page === "howto" && <HowToUse />}
           {page === "settings" && (
