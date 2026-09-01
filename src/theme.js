@@ -561,3 +561,19 @@ export function statusColor(T, status) {
   if (status === "Normal") return T.success;
   return T.textSecondary;
 }
+
+// Oil Sample Tracker's single-letter month chip (N/C/A/M/S/U) — shared by
+// the Sample Tracker page and any condensed per-equipment tracker strip so
+// both read the same cell text the same way.
+export function trackerStatusChip(status) {
+  const d = String(status || "")
+    .trim()
+    .toUpperCase();
+  if (d.startsWith("NORM") || d === "N") return { label: "N", color: "#2DC653" };
+  if (d.startsWith("CAUTI") || d.startsWith("WARN") || d === "C" || d === "W") return { label: "C", color: "#F4A261" };
+  if (d.startsWith("ALERT") || d === "A") return { label: "A", color: "#E63946" };
+  if (d.startsWith("MISSI") || d === "M") return { label: "M", color: "#6B8CAE" };
+  if (d.startsWith("SATIS") || d === "S") return { label: "S", color: "#2DC653" };
+  if (d.startsWith("UNSAT") || d === "U") return { label: "U", color: "#E63946" };
+  return { label: d[0] || "?", color: "#6B8CAE" };
+}

@@ -1,5 +1,5 @@
 import { useTheme } from "../ThemeContext";
-import { formatDate } from "../parsers";
+import { formatDate, sampleTriggerReadings } from "../parsers";
 import LastActionsPanel from "../components/LastActionsPanel";
 
 function Stat({ label, value }) {
@@ -27,44 +27,60 @@ function SampleTimeline({ samples, unitId }) {
   return (
     <div style={s.card}>
       <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 14 }}>Sample Timeline</div>
-      {history.map((h, i) => (
-        <div
-          key={h._id || i}
-          style={{
-            display: "flex",
-            alignItems: "flex-start",
-            gap: 10,
-            padding: "10px 0",
-            borderBottom: i < history.length - 1 ? `1px solid ${T.border}` : "none",
-          }}
-        >
-          <span
+      {history.map((h, i) => {
+        const isFlagged = h.reportStatus === "Alert" || h.reportStatus === "Caution" || h.reportStatus === "Warning";
+        const triggers = isFlagged ? sampleTriggerReadings(h) : [];
+        return (
+          <div
+            key={h._id || i}
             style={{
-              marginTop: 5,
-              width: 9,
-              height: 9,
-              borderRadius: "50%",
-              flexShrink: 0,
-              background: dotColor(T, h.reportStatus),
+              display: "flex",
+              alignItems: "flex-start",
+              gap: 10,
+              padding: "10px 0",
+              borderBottom: i < history.length - 1 ? `1px solid ${T.border}` : "none",
             }}
-          />
-          <div>
-            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <span style={{ fontWeight: 700, fontSize: 13 }}>{formatDate(h.sampledDate)}</span>
-              <span style={s.badge(h.reportStatus)}>{h.reportStatus}</span>
-            </div>
-            <div style={{ fontSize: 12, color: T.textSecondary, marginTop: 4, display: "flex", flexWrap: "wrap", gap: 14 }}>
-              <span>
-                Sample ID: <span style={{ fontFamily: "monospace", color: T.accent }}>{h.sampleId}</span>
-              </span>
-              <span>Visc: {h.visc40C || "—"} cSt</span>
-              <span>Fe: {h.wear?.Fe ?? "—"} ppm</span>
-              <span>Si: {h.contaminants?.Si ?? "—"} ppm</span>
-              <span>Water: {h.water ?? "—"}</span>
+          >
+            <span
+              style={{
+                marginTop: 5,
+                width: 9,
+                height: 9,
+                borderRadius: "50%",
+                flexShrink: 0,
+                background: dotColor(T, h.reportStatus),
+              }}
+            />
+            <div>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <span style={{ fontWeight: 700, fontSize: 13 }}>{formatDate(h.sampledDate)}</span>
+                <span style={s.badge(h.reportStatus)}>{h.reportStatus}</span>
+              </div>
+              <div style={{ fontSize: 12, color: T.textSecondary, marginTop: 4, display: "flex", flexWrap: "wrap", gap: 14 }}>
+                <span>
+                  Sample ID: <span style={{ fontFamily: "monospace", color: T.accent }}>{h.sampleId}</span>
+                </span>
+                {triggers.length > 0
+                  ? triggers.map((t) => (
+                      <span key={t.label}>
+                        {t.label}:{" "}
+                        <span style={{ color: T.danger, fontWeight: 700 }}>
+                          {t.value}
+                          {t.unit ? ` ${t.unit}` : ""}
+                        </span>
+                      </span>
+                    ))
+                  : [
+                      <span key="visc">Visc: {h.visc40C || "—"} cSt</span>,
+                      <span key="fe">Fe: {h.wear?.Fe ?? "—"} ppm</span>,
+                      <span key="si">Si: {h.contaminants?.Si ?? "—"} ppm</span>,
+                      <span key="water">Water: {h.water ?? "—"}</span>,
+                    ]}
+              </div>
             </div>
           </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }

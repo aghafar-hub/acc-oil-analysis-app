@@ -440,6 +440,7 @@ function AppShell({ config, setConfig }) {
               actions={actions}
               equipmentRegistry={equipmentRegistry}
               actionRegistry={actionRegistry}
+              trackerRaw={trackerRaw}
               onAddAction={onAddAction}
               onUpdateAction={onUpdateAction}
               initialCode={oilReportCode}

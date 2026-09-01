@@ -1,37 +1,12 @@
 import { useState } from "react";
 import { useTheme } from "../ThemeContext";
-import { formatDate } from "../parsers";
+import { formatDate, sampleTriggerReadings } from "../parsers";
 import { statusColor } from "../theme";
 import EditSampleModal from "../components/EditSampleModal";
 import EditActionModal from "../components/EditActionModal";
 import EditOilChangeModal from "../components/EditOilChangeModal";
 
 const STATUS_ACTION_COLOR = { Open: "danger", "In Progress": "warning", "Waiting Stoppage": "accent", Closed: "success" };
-
-// Same limits OilReportSearch.jsx's own ParamTable already uses to
-// highlight a reading red — reused here so "what triggered this sample's
-// status" means the same thing in both places instead of a second,
-// possibly-different set of numbers.
-const TRIGGER_CHECKS = [
-  { label: "Fe", unit: "ppm", limit: 20, get: (sm) => sm.wear?.Fe },
-  { label: "Cu", unit: "ppm", limit: 10, get: (sm) => sm.wear?.Cu },
-  { label: "Cr", unit: "ppm", limit: 5, get: (sm) => sm.wear?.Cr },
-  { label: "Si", unit: "ppm", limit: 20, get: (sm) => sm.contaminants?.Si },
-  { label: "PQ Index", unit: "", limit: 15, get: (sm) => sm.pqIndex },
-  { label: "Oxidation", unit: "Ab/cm", limit: 3, get: (sm) => sm.oxidation },
-  { label: "Water", unit: "%", limit: 0.1, get: (sm) => (sm.water === "" ? null : parseFloat(sm.water)) },
-  { label: "TAN", unit: "mg KOH/g", limit: 1, get: (sm) => (sm.tan === "" ? null : parseFloat(sm.tan)) },
-];
-
-// For a Caution/Alert sample, which of its own readings actually crossed a
-// limit — so the timeline can show "Water: 0.15%" instead of always the
-// same fixed Visc/Fe/Si/Water snapshot regardless of what was actually
-// wrong with that sample.
-function triggeringReadings(sm) {
-  return TRIGGER_CHECKS.map((c) => ({ ...c, value: c.get(sm) })).filter(
-    (c) => c.value !== "" && c.value != null && !isNaN(c.value) && c.value > c.limit
-  );
-}
 
 // Single search box up top, then everything about the selected equipment —
 // registry details, sample timeline, oil change history, actions taken —
@@ -439,7 +414,7 @@ export default function Equipment({
                 samplesForEquip.map((sm, i) => {
                   const color = statusColor(T, sm.reportStatus);
                   const isFlagged = sm.reportStatus === "Alert" || sm.reportStatus === "Caution" || sm.reportStatus === "Warning";
-                  const triggers = isFlagged ? triggeringReadings(sm) : [];
+                  const triggers = isFlagged ? sampleTriggerReadings(sm) : [];
                   return (
                     <div
                       key={sm._id || i}

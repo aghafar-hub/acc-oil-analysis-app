@@ -129,6 +129,30 @@ export function computeOilChangeStatus(nextDueDate) {
   return d <= new Date() ? "Overdue" : "Current";
 }
 
+// Same limits OilReportSearch.jsx's own ParamTable already uses to
+// highlight a reading red — reused everywhere a sample timeline shows
+// "why this sample is flagged" so that means the same thing in every one
+// of those places instead of a second, possibly-different set of numbers.
+export const SAMPLE_TRIGGER_CHECKS = [
+  { label: "Fe", unit: "ppm", limit: 20, get: (sm) => sm.wear?.Fe },
+  { label: "Cu", unit: "ppm", limit: 10, get: (sm) => sm.wear?.Cu },
+  { label: "Cr", unit: "ppm", limit: 5, get: (sm) => sm.wear?.Cr },
+  { label: "Si", unit: "ppm", limit: 20, get: (sm) => sm.contaminants?.Si },
+  { label: "PQ Index", unit: "", limit: 15, get: (sm) => sm.pqIndex },
+  { label: "Oxidation", unit: "Ab/cm", limit: 3, get: (sm) => sm.oxidation },
+  { label: "Water", unit: "%", limit: 0.1, get: (sm) => (sm.water === "" ? null : parseFloat(sm.water)) },
+  { label: "TAN", unit: "mg KOH/g", limit: 1, get: (sm) => (sm.tan === "" ? null : parseFloat(sm.tan)) },
+];
+
+// For a Caution/Alert sample, which of its own readings actually crossed a
+// limit — so a timeline can show "Water: 0.15%" instead of always the same
+// fixed Visc/Fe/Si/Water snapshot regardless of what was actually wrong.
+export function sampleTriggerReadings(sm) {
+  return SAMPLE_TRIGGER_CHECKS.map((c) => ({ ...c, value: c.get(sm) })).filter(
+    (c) => c.value !== "" && c.value != null && !isNaN(c.value) && c.value > c.limit
+  );
+}
+
 // Computes { label: "OK"|"OVERDUE"|"MISSING", daysInfo } for one equipment,
 // given its most recent sample/tracker date and its registry interval.
 export function sampleTrackerStatus(lastDateStr, intervalText) {

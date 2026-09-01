@@ -1,20 +1,8 @@
 import { useMemo, useState } from "react";
 import { useTheme } from "../ThemeContext";
 import { parseTrackerRows, sampleTrackerStatus } from "../parsers";
+import { trackerStatusChip as statusChip } from "../theme";
 import EquipmentSearch from "../components/EquipmentSearch";
-
-function statusChip(status) {
-  const d = String(status || "")
-    .trim()
-    .toUpperCase();
-  if (d.startsWith("NORM") || d === "N") return { label: "N", color: "#2DC653" };
-  if (d.startsWith("CAUTI") || d.startsWith("WARN") || d === "C" || d === "W") return { label: "C", color: "#F4A261" };
-  if (d.startsWith("ALERT") || d === "A") return { label: "A", color: "#E63946" };
-  if (d.startsWith("MISSI") || d === "M") return { label: "M", color: "#6B8CAE" };
-  if (d.startsWith("SATIS") || d === "S") return { label: "S", color: "#2DC653" };
-  if (d.startsWith("UNSAT") || d === "U") return { label: "U", color: "#E63946" };
-  return { label: d[0] || "?", color: "#6B8CAE" };
-}
 
 // The real "Oil Sample Tracker" monthly grid — parsed from the sheet tab of
 // the same name (via trackerRaw), not derived from Data_Entry. Each

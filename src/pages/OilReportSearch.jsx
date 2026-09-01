@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useTheme } from "../ThemeContext";
-import { formatDate } from "../parsers";
+import { formatDate, sampleTriggerReadings, parseTrackerRows, sampleTrackerStatus } from "../parsers";
+import { trackerStatusChip } from "../theme";
 import LastActionsPanel from "../components/LastActionsPanel";
 import LineChart from "../components/LineChart";
 
@@ -77,6 +78,7 @@ export default function OilReportSearch({
   actions,
   equipmentRegistry,
   actionRegistry,
+  trackerRaw,
   onAddAction,
   onUpdateAction,
   initialCode,
@@ -110,6 +112,22 @@ export default function OilReportSearch({
   const lastChange = (oilChanges || [])
     .filter((o) => o.equipmentCode === equipCode && o.changeDate)
     .sort((a, b) => new Date(b.changeDate) - new Date(a.changeDate))[0];
+
+  // Condensed, single-equipment slice of the same "Oil Sample Tracker"
+  // monthly grid the dedicated Sample Tracker page shows for everyone —
+  // not derived from Data_Entry, so it can flag a month with no sample at
+  // all, which the Sample Timeline above (built from Data_Entry) can't.
+  const trackerHistory = equipCode !== "All" ? parseTrackerRows(trackerRaw)[equipCode] || [] : [];
+  const trackerOilChangedMonths = new Set(
+    (oilChanges || [])
+      .filter((o) => o.equipmentCode === equipCode && o.changeDate)
+      .map((o) => {
+        const d = new Date(o.changeDate);
+        return isNaN(d) ? null : d.toLocaleDateString("en-GB", { month: "short", year: "numeric" });
+      })
+      .filter(Boolean)
+  );
+  const trackerStatus = equipCode !== "All" ? sampleTrackerStatus(trackerHistory[0]?.date || "", reg?.interval) : null;
 
   return (
     <div>
@@ -517,73 +535,149 @@ export default function OilReportSearch({
               <span style={{ fontSize: 13, fontWeight: 700, color: T.textPrimary }}>Sample Timeline</span>
             </div>
             <div style={{ padding: "16px 20px" }}>
-              {[...history].reverse().map((d, i) => (
-                <div
-                  key={d._id || i}
-                  style={{
-                    display: "flex",
-                    alignItems: "flex-start",
-                    gap: 14,
-                    marginBottom: 14,
-                    paddingBottom: 14,
-                    borderBottom: i < history.length - 1 ? "1px solid #1E3A5F" : "none",
-                  }}
-                >
+              {[...history].reverse().map((d, i) => {
+                const isFlagged = d.reportStatus === "Alert" || d.reportStatus === "Caution" || d.reportStatus === "Warning";
+                const triggers = isFlagged ? sampleTriggerReadings(d) : [];
+                return (
                   <div
+                    key={d._id || i}
                     style={{
-                      width: 10,
-                      height: 10,
-                      borderRadius: "50%",
-                      flexShrink: 0,
-                      marginTop: 3,
-                      background: statusColor(T, d.reportStatus),
+                      display: "flex",
+                      alignItems: "flex-start",
+                      gap: 14,
+                      marginBottom: 14,
+                      paddingBottom: 14,
+                      borderBottom: i < history.length - 1 ? "1px solid #1E3A5F" : "none",
                     }}
-                  />
-                  <div>
-                    <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
-                      <span style={{ fontSize: 13, fontWeight: 700, color: T.textHighlight }}>{formatDate(d.sampledDate)}</span>
-                      <span
-                        style={{
-                          background: statusColor(T, d.reportStatus),
-                          color: "#fff",
-                          borderRadius: 4,
-                          padding: "1px 8px",
-                          fontSize: 11,
-                          fontWeight: 700,
-                        }}
-                      >
-                        {d.reportStatus}
-                      </span>
-                      {d.sampledBy && <span style={{ fontSize: 11, color: T.textSecondary }}>by {d.sampledBy}</span>}
-                    </div>
-                    <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
-                      <span style={{ fontSize: 11, color: T.textSecondary }}>
-                        Sample ID: <span style={{ color: T.textSubtle, fontFamily: "monospace" }}>{d.sampleId || "—"}</span>
-                      </span>
-                      <span style={{ fontSize: 11, color: T.textSecondary }}>
-                        Visc: <span style={{ color: T.accent, fontFamily: "monospace", fontWeight: 700 }}>{d.visc40C} cSt</span>
-                      </span>
-                      <span style={{ fontSize: 11, color: T.textSecondary }}>
-                        Fe:{" "}
-                        <span style={{ color: (d.wear?.Fe || 0) > 20 ? T.danger : T.textHighlight, fontFamily: "monospace" }}>
-                          {d.wear?.Fe ?? 0} ppm
+                  >
+                    <div
+                      style={{
+                        width: 10,
+                        height: 10,
+                        borderRadius: "50%",
+                        flexShrink: 0,
+                        marginTop: 3,
+                        background: statusColor(T, d.reportStatus),
+                      }}
+                    />
+                    <div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
+                        <span style={{ fontSize: 13, fontWeight: 700, color: T.textHighlight }}>{formatDate(d.sampledDate)}</span>
+                        <span
+                          style={{
+                            background: statusColor(T, d.reportStatus),
+                            color: "#fff",
+                            borderRadius: 4,
+                            padding: "1px 8px",
+                            fontSize: 11,
+                            fontWeight: 700,
+                          }}
+                        >
+                          {d.reportStatus}
                         </span>
-                      </span>
-                      <span style={{ fontSize: 11, color: T.textSecondary }}>
-                        Si:{" "}
-                        <span style={{ color: (d.contaminants?.Si || 0) > 20 ? T.danger : T.textHighlight, fontFamily: "monospace" }}>
-                          {d.contaminants?.Si ?? 0} ppm
+                        {d.sampledBy && <span style={{ fontSize: 11, color: T.textSecondary }}>by {d.sampledBy}</span>}
+                      </div>
+                      <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
+                        <span style={{ fontSize: 11, color: T.textSecondary }}>
+                          Sample ID: <span style={{ color: T.textSubtle, fontFamily: "monospace" }}>{d.sampleId || "—"}</span>
                         </span>
-                      </span>
-                      <span style={{ fontSize: 11, color: T.textSecondary }}>
-                        Water: <span style={{ color: T.textHighlight, fontFamily: "monospace" }}>{d.water}</span>
-                      </span>
+                        {triggers.length > 0
+                          ? triggers.map((t) => (
+                              <span key={t.label} style={{ fontSize: 11, color: T.textSecondary }}>
+                                {t.label}:{" "}
+                                <span style={{ color: T.danger, fontFamily: "monospace", fontWeight: 700 }}>
+                                  {t.value}
+                                  {t.unit ? ` ${t.unit}` : ""}
+                                </span>
+                              </span>
+                            ))
+                          : [
+                              <span key="visc" style={{ fontSize: 11, color: T.textSecondary }}>
+                                Visc: <span style={{ color: T.accent, fontFamily: "monospace", fontWeight: 700 }}>{d.visc40C} cSt</span>
+                              </span>,
+                              <span key="fe" style={{ fontSize: 11, color: T.textSecondary }}>
+                                Fe: <span style={{ color: T.textHighlight, fontFamily: "monospace" }}>{d.wear?.Fe ?? 0} ppm</span>
+                              </span>,
+                              <span key="si" style={{ fontSize: 11, color: T.textSecondary }}>
+                                Si: <span style={{ color: T.textHighlight, fontFamily: "monospace" }}>{d.contaminants?.Si ?? 0} ppm</span>
+                              </span>,
+                              <span key="water" style={{ fontSize: 11, color: T.textSecondary }}>
+                                Water: <span style={{ color: T.textHighlight, fontFamily: "monospace" }}>{d.water}</span>
+                              </span>,
+                            ]}
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
+
+          {trackerHistory.length > 0 && (
+            <div style={{ background: T.cardBg, border: "1px solid #1E3A5F", borderRadius: 10, overflow: "hidden", marginBottom: 20 }}>
+              <div
+                style={{
+                  padding: "10px 16px",
+                  background: T.infoBarBg,
+                  borderBottom: "1px solid #1E3A5F",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  flexWrap: "wrap",
+                  gap: 8,
+                }}
+              >
+                <span style={{ fontSize: 13, fontWeight: 700, color: T.textPrimary }}>Sample Tracker</span>
+                {trackerStatus && (
+                  <span
+                    style={{
+                      fontSize: 11,
+                      fontWeight: 700,
+                      color: { OK: T.success, OVERDUE: T.warning, MISSING: T.danger }[trackerStatus.label] || T.textSecondary,
+                    }}
+                  >
+                    {trackerStatus.label}
+                    {trackerStatus.daysInfo ? ` · ${trackerStatus.daysInfo}` : ""}
+                  </span>
+                )}
+              </div>
+              <div style={{ padding: "14px 16px", display: "flex", gap: 6, flexWrap: "wrap" }}>
+                {trackerHistory.slice(0, 12).map((h) => {
+                  const chip = trackerStatusChip(h.status);
+                  const oc = trackerOilChangedMonths.has(h.monthLabel);
+                  return (
+                    <div key={h.monthLabel} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3 }}>
+                      <div
+                        title={`${h.monthLabel}: ${h.status}${h.date && h.date !== h.monthLabel ? " (" + h.date + ")" : ""}`}
+                        style={{
+                          background: chip.color + "33",
+                          color: chip.color,
+                          border: `1px solid ${chip.color}66`,
+                          borderRadius: 6,
+                          padding: "3px 8px",
+                          fontSize: 11,
+                          fontWeight: 800,
+                          minWidth: 26,
+                          textAlign: "center",
+                        }}
+                      >
+                        {chip.label}
+                      </div>
+                      <span style={{ fontSize: 9, color: T.textMuted, whiteSpace: "nowrap" }}>{h.monthLabel}</span>
+                      {oc && (
+                        <i
+                          className="ti ti-droplet-filled-2"
+                          title={`Oil changed — ${h.monthLabel}`}
+                          style={{ fontSize: 10, color: "#7C3AED" }}
+                          aria-hidden="true"
+                        />
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           <p style={{ fontSize: 11, color: T.textMuted, textAlign: "center", marginTop: 8 }}>
             Results and comments of this analysis are advisory only. The validity of the data may be impaired by a non-representative sample
