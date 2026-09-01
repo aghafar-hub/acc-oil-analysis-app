@@ -17,7 +17,16 @@
 // re-fetched row doesn't match what we tried to save, we surface a real
 // error instead of pretending it worked.
 
-import { rowToAction, actionToRow, ACTION_HEADERS, rowToOilChange, oilChangeToRow, rowToSample, sampleToRow } from "./parsers";
+import {
+  rowToAction,
+  actionToRow,
+  ACTION_HEADERS,
+  rowToOilChange,
+  oilChangeToRow,
+  rowToSample,
+  sampleToRow,
+  sameCalendarDay,
+} from "./parsers";
 
 export class SaveVerificationError extends Error {
   constructor(message) {
@@ -44,12 +53,23 @@ async function postBlind(webhookUrl, body) {
   }
 }
 
-function rowsEqual(a, b, skipIndices) {
+// dateIndices gets the sameCalendarDay() fallback on a string mismatch —
+// scoped to columns we know hold dates. JS's own Date parser reads plenty
+// of non-date text as "valid" (e.g. new Date("0-6") or new Date("MOBIL SHC
+// 630") both parse without error), so applying that fallback to every
+// column would let real mismatches on Ac. No., Oil Type, etc. slip through
+// undetected instead of catching a genuinely failed write.
+function rowsEqual(a, b, { skipIndices, dateIndices } = {}) {
   const skip = new Set(skipIndices || []);
+  const dates = new Set(dateIndices || []);
   const len = Math.max(a.length, b.length);
   for (let i = 0; i < len; i++) {
     if (skip.has(i)) continue;
-    if (String(a[i] ?? "").trim() !== String(b[i] ?? "").trim()) return false;
+    const av = String(a[i] ?? "").trim();
+    const bv = String(b[i] ?? "").trim();
+    if (av === bv) continue;
+    if (dates.has(i) && sameCalendarDay(av, bv)) continue;
+    return false;
   }
   return true;
 }
@@ -60,6 +80,15 @@ function rowsEqual(a, b, skipIndices) {
 // there and must not be compared, or every save would spuriously fail
 // verification.
 const ACTION_LAST_MODIFIED_COL = 17;
+
+// Every date-bearing column in the Action Tracker row — Revision Date,
+// Sample Date, Last Change, Completed Date — gets the sameCalendarDay()
+// tolerance on verification, since any of them can round-trip through a
+// Google Sheets Date-typed cell and come back in a different string form.
+const ACTION_DATE_COLS = [4, 5, 8, 12];
+
+// Data_Entry's Sampled Date column.
+const SAMPLE_DATE_COL = 3;
 
 // ── Reads ─────────────────────────────────────────────────────────────────
 
@@ -141,7 +170,7 @@ export async function saveAction(webhookUrl, action, { isNew }) {
 
   const verify = await getEquipmentRows(webhookUrl, action.equipmentCode || action.unitId || "");
   const savedRow = (verify.actions || []).find((r) => String(r[0]).trim() === String(row[0]).trim());
-  if (!savedRow || !rowsEqual(savedRow, row, [ACTION_LAST_MODIFIED_COL])) {
+  if (!savedRow || !rowsEqual(savedRow, row, { skipIndices: [ACTION_LAST_MODIFIED_COL], dateIndices: ACTION_DATE_COLS })) {
     throw new SaveVerificationError(
       `The action wasn't confirmed saved to the sheet. It may not have written — please check the Action Tracker tab and try again.`
     );
@@ -173,7 +202,7 @@ export async function saveOilChange(webhookUrl, oilChange) {
   );
   // Only columns 10 (Last Change) and 11 (Next Due) are ever written by the
   // backend for this sheet — see updateRow's special-case in the Apps Script.
-  if (!savedRow || String(savedRow[9] ?? "").trim() !== String(row[9] ?? "").trim()) {
+  if (!savedRow || !sameCalendarDay(savedRow[9], row[9])) {
     throw new SaveVerificationError(`The oil change wasn't confirmed saved to the sheet — please try again.`);
   }
   return rowToOilChange(savedRow);
@@ -208,7 +237,7 @@ export async function updateSample(webhookUrl, sample) {
 
   const verify = await getEquipmentRows(webhookUrl, sample.unitId || "");
   const savedRow = (verify.samples || []).find((r) => String(r[2]).trim() === String(matchValues[1]).trim());
-  if (!savedRow || !rowsEqual(savedRow, row)) {
+  if (!savedRow || !rowsEqual(savedRow, row, { dateIndices: [SAMPLE_DATE_COL] })) {
     throw new SaveVerificationError(`The sample wasn't confirmed saved to the sheet. It may not have written — please try again.`);
   }
   return rowToSample(savedRow);

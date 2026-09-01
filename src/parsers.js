@@ -9,6 +9,25 @@ export function formatDate(v) {
   return d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
 }
 
+// True if two values parse to the same calendar day, regardless of which
+// string form each one is in. Google Sheets can silently coerce a
+// date-looking string (e.g. the "YYYY-MM-DD" an <input type="date"> sends)
+// into a real Date-typed cell — read back, that cell can come out as a
+// completely different string (a Date.toString(), a re-formatted date...)
+// that still names the exact same day. Anything comparing two dates that
+// came from two different read/write round trips needs this instead of
+// strict string equality, or a same-day value can register as a mismatch.
+export function sameCalendarDay(a, b) {
+  const sa = String(a ?? "").trim();
+  const sb = String(b ?? "").trim();
+  if (sa === sb) return true;
+  if (!sa || !sb) return false;
+  const da = new Date(sa);
+  const db = new Date(sb);
+  if (isNaN(da.getTime()) || isNaN(db.getTime())) return false;
+  return da.getFullYear() === db.getFullYear() && da.getMonth() === db.getMonth() && da.getDate() === db.getDate();
+}
+
 // ── Oil Sample Tracker (monthly grid) ─────────────────────────────────────
 // Ported from the original app's own parsing logic, not re-derived: month
 // column headers like "Jul-22"/"Apr 2026", cell values as "STATUS|DATE"

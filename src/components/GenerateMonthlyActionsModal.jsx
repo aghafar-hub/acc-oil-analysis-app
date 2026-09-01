@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useTheme } from "../ThemeContext";
-import { formatDate } from "../parsers";
+import { formatDate, sameCalendarDay } from "../parsers";
 import { toISODate, latestOilChangeFor, autofillFromEquipment } from "../actionAutofill";
 
 // "Caution" and "Warning" are the same bucket everywhere else in the app
@@ -20,27 +20,36 @@ function computeCandidates(samples, actions, equipmentRegistry, oilChanges) {
     if (!cur || new Date(sm.sampledDate) > new Date(cur.sampledDate)) latestByEquip[code] = sm;
   });
 
-  return Object.values(latestByEquip)
-    .filter((sm) => QUALIFYING_STATUSES.has(sm.reportStatus))
-    .filter((sm) => !(actions || []).some((a) => a.equipmentCode === sm.unitId && a.sampleDate === sm.sampledDate))
-    .map((sm) => {
-      const filled = autofillFromEquipment(sm.unitId, { equipmentRegistry, oilChanges, allActions: actions, excludeId: null });
-      const latestOil = latestOilChangeFor(oilChanges, sm.unitId);
-      return {
-        sample: sm,
-        equipmentCode: sm.unitId,
-        description: filled.description,
-        oilType: filled.oilType,
-        contractor: filled.contractor,
-        lastChange: latestOil ? formatDate(latestOil.changeDate) : "",
-        prevMonthAgreedAction: filled.prevMonthAgreedAction,
-        revisionDate: toISODate(new Date()),
-        sampleDate: sm.sampledDate,
-        sampleResult: (sm.reportStatus || "").toUpperCase(),
-        status: "Open",
-      };
-    })
-    .sort((a, b) => a.equipmentCode.localeCompare(b.equipmentCode));
+  return (
+    Object.values(latestByEquip)
+      .filter((sm) => QUALIFYING_STATUSES.has(sm.reportStatus))
+      // Checked against every action ever recorded for this equipment, no
+      // matter how old — not just its own most recent one. Uses
+      // sameCalendarDay() rather than a plain string match since an action's
+      // Sample Date can round-trip through the sheet in a differently
+      // formatted (but same-day) string — see sameCalendarDay()'s own
+      // comment for why a strict === would occasionally miss a real match
+      // and let this generate a duplicate action.
+      .filter((sm) => !(actions || []).some((a) => a.equipmentCode === sm.unitId && sameCalendarDay(a.sampleDate, sm.sampledDate)))
+      .map((sm) => {
+        const filled = autofillFromEquipment(sm.unitId, { equipmentRegistry, oilChanges, allActions: actions, excludeId: null });
+        const latestOil = latestOilChangeFor(oilChanges, sm.unitId);
+        return {
+          sample: sm,
+          equipmentCode: sm.unitId,
+          description: filled.description,
+          oilType: filled.oilType,
+          contractor: filled.contractor,
+          lastChange: latestOil ? formatDate(latestOil.changeDate) : "",
+          prevMonthAgreedAction: filled.prevMonthAgreedAction,
+          revisionDate: toISODate(new Date()),
+          sampleDate: sm.sampledDate,
+          sampleResult: (sm.reportStatus || "").toUpperCase(),
+          status: "Open",
+        };
+      })
+      .sort((a, b) => a.equipmentCode.localeCompare(b.equipmentCode))
+  );
 }
 
 export default function GenerateMonthlyActionsModal({ samples, actions, equipmentRegistry, oilChanges, onAddAction, onClose }) {
