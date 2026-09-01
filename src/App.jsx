@@ -16,6 +16,7 @@ import HowToUse from "./pages/HowToUse";
 import Settings from "./pages/Settings";
 import { loadConfig, saveConfig, readCache, writeCache } from "./config";
 import { loadEquipmentRegistry } from "./equipmentRegistry";
+import { loadActionRegistry } from "./actionRegistry";
 import * as api from "./api";
 
 let toastId = 0;
@@ -41,6 +42,7 @@ function AppShell({ config, setConfig }) {
   const [oilChanges, setOilChanges] = useState(() => readCache("oilChanges")?.data || []);
   const [trackerRaw, setTrackerRaw] = useState(() => readCache("trackerRaw")?.data || []);
   const [equipmentRegistry, setEquipmentRegistry] = useState(() => loadEquipmentRegistry());
+  const [actionRegistry, setActionRegistry] = useState(() => loadActionRegistry());
   const [syncState, setSyncState] = useState("idle");
   const [syncMsg, setSyncMsg] = useState("");
   const [toasts, setToasts] = useState([]);
@@ -415,6 +417,7 @@ function AppShell({ config, setConfig }) {
               oilChanges={oilChanges}
               equipmentOptions={equipmentOptions}
               equipmentRegistry={equipmentRegistry}
+              actionRegistry={actionRegistry}
               onAddAction={onAddAction}
               onUpdateAction={onUpdateAction}
               onDeleteAction={onDeleteAction}
@@ -429,6 +432,7 @@ function AppShell({ config, setConfig }) {
               oilChanges={oilChanges}
               actions={actions}
               equipmentRegistry={equipmentRegistry}
+              actionRegistry={actionRegistry}
               onAddAction={onAddAction}
               onUpdateAction={onUpdateAction}
               initialCode={oilReportCode}
@@ -448,6 +452,7 @@ function AppShell({ config, setConfig }) {
               samples={samples}
               oilChanges={oilChanges}
               equipmentRegistry={equipmentRegistry}
+              actionRegistry={actionRegistry}
               onAddAction={onAddAction}
               onUpdateAction={onUpdateAction}
               onDeleteAction={onDeleteAction}
@@ -464,6 +469,8 @@ function AppShell({ config, setConfig }) {
               syncState={syncState}
               syncMsg={syncMsg}
               onRegistryChange={setEquipmentRegistry}
+              actionRegistry={actionRegistry}
+              onActionRegistryChange={setActionRegistry}
             />
           )}
         </div>

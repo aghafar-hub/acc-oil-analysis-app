@@ -98,6 +98,35 @@ export async function getEquipmentRows(webhookUrl, equipmentCode) {
   return getJSON(webhookUrl, { action: "getEquipment", id: equipmentCode });
 }
 
+// The "Action Registry" sheet tab (columns: No, Actions) backs the
+// multi-select pickers for Contractor Action / ACC Action. Parsed
+// defensively since the exact shape the backend returns for this action
+// (plain label strings vs {no, action} objects) hasn't been confirmed.
+export async function getActionRegistry(webhookUrl) {
+  const json = await getJSON(webhookUrl, { action: "readActionRegistry" });
+  const raw = json.actions || json.registry || json.items || [];
+  return raw
+    .map((item) => (typeof item === "string" ? item : item?.action || item?.label || item?.name || ""))
+    .map((s) => String(s).trim())
+    .filter(Boolean);
+}
+
+// Adds one new entry to the Action Registry sheet — reuses the same generic
+// "append" write every other sheet in this app uses, on the assumption the
+// backend's append handler isn't hardcoded to specific sheet names.
+export async function addActionRegistryEntry(webhookUrl, label) {
+  const trimmed = String(label || "").trim();
+  if (!trimmed) return getActionRegistry(webhookUrl);
+  const current = await getActionRegistry(webhookUrl);
+  const nextNo = current.length + 1;
+  await postBlind(webhookUrl, { action: "append", sheet: "Action Registry", row: [nextNo, trimmed], headers: ["No", "Actions"] });
+  const verify = await getActionRegistry(webhookUrl);
+  if (!verify.some((a) => a.toLowerCase() === trimmed.toLowerCase())) {
+    throw new SaveVerificationError(`"${trimmed}" wasn't confirmed saved to the Action Registry sheet — please try again.`);
+  }
+  return verify;
+}
+
 // ── Writes (each verified by a follow-up read) ──────────────────────────
 
 export async function saveAction(webhookUrl, action, { isNew }) {

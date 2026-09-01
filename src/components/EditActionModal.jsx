@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useTheme } from "../ThemeContext";
 import { nextAcNo, formatDate } from "../parsers";
 import EquipmentSearch from "./EquipmentSearch";
+import MultiSelectTags from "./MultiSelectTags";
 
 const STATUS_OPTIONS = ["Open", "In Progress", "Closed", "Waiting Stoppage"];
 const CONTRACTOR_OPTIONS = ["RHI", "ASEC"];
@@ -65,6 +66,7 @@ export default function EditActionModal({
   samples,
   oilChanges,
   equipmentRegistry,
+  actionRegistry,
   onClose,
   onSave,
   onDelete,
@@ -337,9 +339,14 @@ export default function EditActionModal({
         <p style={{ fontSize: 12, fontWeight: 700, color: T.accent, margin: "0 0 10px" }}>Analysis &amp; Actions</p>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 22 }}>
           {textarea("Sample Analysis", "sampleAnalysis")}
-          {textarea("Contractor Action", "contractorAction")}
+          <MultiSelectTags
+            label="Contractor Action"
+            value={form.contractorAction}
+            onChange={(v) => set("contractorAction", v)}
+            options={actionRegistry}
+          />
           {textarea("Prev. Month Agreed Action", "prevMonthAgreedAction")}
-          {textarea("ACC Action", "accAction")}
+          <MultiSelectTags label="ACC Action" value={form.accAction} onChange={(v) => set("accAction", v)} options={actionRegistry} />
           {textarea("Agreed Action", "agreedAction")}
           {isClosed && <div style={{ gridColumn: "1 / -1" }}>{textarea("Closing Comment", "closingComment")}</div>}
         </div>

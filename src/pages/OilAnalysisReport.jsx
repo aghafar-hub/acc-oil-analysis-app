@@ -76,6 +76,7 @@ export default function OilAnalysisReport({
   oilChanges,
   equipmentOptions,
   equipmentRegistry,
+  actionRegistry,
   onAddAction,
   onUpdateAction,
   onDeleteAction,
@@ -225,6 +226,7 @@ export default function OilAnalysisReport({
         limit={5}
         equipmentOptions={equipmentOptions}
         equipmentRegistry={equipmentRegistry}
+        actionRegistry={actionRegistry}
       />
     </div>
   );

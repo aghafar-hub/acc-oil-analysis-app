@@ -71,7 +71,16 @@ function NumCell({ T, val, highlight }) {
 // page opened from Dashboard/Equipment). Shows every sample for one
 // equipment as columns (newest on the right) plus trend charts, matching
 // the original app's `qh` component field-for-field.
-export default function OilReportSearch({ samples, oilChanges, actions, equipmentRegistry, onAddAction, onUpdateAction, initialCode }) {
+export default function OilReportSearch({
+  samples,
+  oilChanges,
+  actions,
+  equipmentRegistry,
+  actionRegistry,
+  onAddAction,
+  onUpdateAction,
+  initialCode,
+}) {
   const { T, s } = useTheme();
   const registry = equipmentRegistry || [];
   const [equipCode, setEquipCode] = useState(initialCode || "All");
@@ -595,6 +604,7 @@ export default function OilReportSearch({ samples, oilChanges, actions, equipmen
             title="Last 5 Actions"
             limit={5}
             equipmentRegistry={registry}
+            actionRegistry={actionRegistry}
           />
         </div>
       )}

@@ -18,6 +18,7 @@ export default function LastActionsPanel({
   title,
   limit,
   equipmentRegistry,
+  actionRegistry,
 }) {
   const { T, s } = useTheme();
   const STATUS_COLOR = { Open: T.danger, "In Progress": T.warning, Closed: T.success, "Waiting Stoppage": T.accent };
@@ -239,6 +240,7 @@ export default function LastActionsPanel({
           samples={samples}
           oilChanges={oilChanges}
           equipmentRegistry={equipmentRegistry}
+          actionRegistry={actionRegistry}
           saving={saving}
           onClose={() => !saving && setEditing(null)}
           onSave={handleSave}

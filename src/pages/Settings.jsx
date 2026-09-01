@@ -3,6 +3,7 @@ import { useTheme } from "../ThemeContext";
 import { THEMES, THEME_NAMES } from "../theme";
 import * as api from "../api";
 import { loadEquipmentRegistry, saveEquipmentRegistry } from "../equipmentRegistry";
+import { saveActionRegistry } from "../actionRegistry";
 
 const CONFIG_PASSWORD = "17593";
 
@@ -129,7 +130,7 @@ function Field({ T, s, label, value, placeholder, onChange, desc, type = "text" 
 // password) and Configuration (password 17593, re-required every time the
 // tab is opened) — including the Equipment Registry Sync reconciliation
 // flow, App Status summary, and export/import/reset/clear-cache actions.
-export default function Settings({ config, onSave, onSync, syncState, syncMsg, onRegistryChange }) {
+export default function Settings({ config, onSave, onSync, syncState, syncMsg, onRegistryChange, onActionRegistryChange, actionRegistry }) {
   const { T, s, themeName } = useTheme();
   const [draft, setDraft] = useState(() => ({ ...config }));
   const [saved, setSaved] = useState(false);
@@ -147,6 +148,10 @@ export default function Settings({ config, onSave, onSync, syncState, syncMsg, o
 
   const [importMsg, setImportMsg] = useState("");
   const [cacheMsg, setCacheMsg] = useState("");
+
+  const [newActionText, setNewActionText] = useState("");
+  const [actionSyncing, setActionSyncing] = useState(false);
+  const [actionMsg, setActionMsg] = useState("");
 
   function set(field, value) {
     setDraft((d) => ({ ...d, [field]: value }));
@@ -222,6 +227,46 @@ export default function Settings({ config, onSave, onSync, syncState, syncMsg, o
     onRegistryChange?.(merged);
     setRegistryResult({ applied: true, total: merged.length });
     setRegistryPreview(null);
+  }
+
+  async function syncActionRegistry() {
+    if (!draft.webhookUrl) return;
+    setActionSyncing(true);
+    setActionMsg("");
+    try {
+      const list = await api.getActionRegistry(draft.webhookUrl);
+      if (!list || list.length === 0) {
+        setActionMsg("❌ No actions returned from the sheet");
+        return;
+      }
+      saveActionRegistry(list);
+      onActionRegistryChange?.(list);
+      setActionMsg(`✓ Synced — ${list.length} actions loaded`);
+    } catch (err) {
+      setActionMsg(`❌ ${err.message}`);
+    } finally {
+      setActionSyncing(false);
+      setTimeout(() => setActionMsg(""), 6000);
+    }
+  }
+
+  async function addNewAction() {
+    const label = newActionText.trim();
+    if (!label || !draft.webhookUrl) return;
+    setActionSyncing(true);
+    setActionMsg("");
+    try {
+      const list = await api.addActionRegistryEntry(draft.webhookUrl, label);
+      saveActionRegistry(list);
+      onActionRegistryChange?.(list);
+      setNewActionText("");
+      setActionMsg(`✓ "${label}" added`);
+    } catch (err) {
+      setActionMsg(`❌ ${err.message}`);
+    } finally {
+      setActionSyncing(false);
+      setTimeout(() => setActionMsg(""), 6000);
+    }
   }
 
   function resetConfig() {
@@ -491,6 +536,65 @@ export default function Settings({ config, onSave, onSync, syncState, syncMsg, o
                     )}
                   </div>
                 )}
+              </div>
+
+              <div style={{ ...s.card, marginBottom: 20 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+                  <i className="ti ti-list-check" style={{ color: T.accent, fontSize: 18 }} aria-hidden="true" />
+                  <div>
+                    <p style={{ margin: 0, fontWeight: 700, color: T.textPrimary, fontSize: 14 }}>Action Registry</p>
+                    <p style={{ margin: 0, fontSize: 11, color: T.textSecondary }}>
+                      The pick list Contractor Action / ACC Action draw from in Action Tracker. Add new entries here — they're saved to the
+                      "Action Registry" sheet tab.
+                    </p>
+                  </div>
+                </div>
+
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 14 }}>
+                  {(actionRegistry || []).length === 0 && <span style={{ fontSize: 12, color: T.textMuted }}>No actions yet.</span>}
+                  {(actionRegistry || []).map((a) => (
+                    <span
+                      key={a}
+                      style={{
+                        background: T.navActive,
+                        color: T.accent,
+                        borderRadius: 4,
+                        padding: "3px 8px",
+                        fontSize: 12,
+                        fontWeight: 600,
+                      }}
+                    >
+                      {a}
+                    </span>
+                  ))}
+                </div>
+
+                <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                  <input
+                    style={{ ...s.input, fontSize: 13, width: 220 }}
+                    value={newActionText}
+                    placeholder="New action, e.g. Change Belt"
+                    onChange={(e) => setNewActionText(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && addNewAction()}
+                  />
+                  <button
+                    style={{ ...s.btn, fontSize: 12 }}
+                    onClick={addNewAction}
+                    disabled={actionSyncing || !draft.webhookUrl || !newActionText.trim()}
+                  >
+                    <i className="ti ti-plus" aria-hidden="true" /> Add
+                  </button>
+                  <button style={{ ...s.btn, fontSize: 12 }} onClick={syncActionRegistry} disabled={actionSyncing || !draft.webhookUrl}>
+                    <i
+                      className={`ti ${actionSyncing ? "ti-loader" : "ti-refresh"}`}
+                      style={{ animation: actionSyncing ? "spin 1s linear infinite" : "none" }}
+                      aria-hidden="true"
+                    />{" "}
+                    Sync from Sheet
+                  </button>
+                  {!draft.webhookUrl && <span style={{ fontSize: 11, color: T.danger }}>Configure Webhook URL first</span>}
+                  {actionMsg && <span style={{ fontSize: 12, color: actionMsg.startsWith("✓") ? T.success : T.danger }}>{actionMsg}</span>}
+                </div>
               </div>
 
               <div style={{ ...s.card, marginBottom: 20 }}>

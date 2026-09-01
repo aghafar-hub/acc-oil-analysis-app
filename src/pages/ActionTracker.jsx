@@ -13,7 +13,16 @@ const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "
 // callbacks that the Oil Analysis Report page uses (both passed down from
 // App's lifted state) — that shared wiring, plus the verified writes in
 // api.js, is what actually fixes the original sync bug.
-export default function ActionTracker({ actions, samples, oilChanges, equipmentRegistry, onAddAction, onUpdateAction, onDeleteAction }) {
+export default function ActionTracker({
+  actions,
+  samples,
+  oilChanges,
+  equipmentRegistry,
+  actionRegistry,
+  onAddAction,
+  onUpdateAction,
+  onDeleteAction,
+}) {
   const { T, s } = useTheme();
   const [equipCode, setEquipCode] = useState("");
   const [month, setMonth] = useState("All");
@@ -261,6 +270,7 @@ export default function ActionTracker({ actions, samples, oilChanges, equipmentR
           samples={samples}
           oilChanges={oilChanges}
           equipmentRegistry={registry}
+          actionRegistry={actionRegistry}
           saving={saving}
           onClose={() => !saving && setEditing(null)}
           onSave={handleSave}
