@@ -1,63 +1,12 @@
 import { useState } from "react";
 import { useTheme } from "../ThemeContext";
 import { nextAcNo, formatDate } from "../parsers";
+import { toISODate, latestOilChangeFor, autofillFromEquipment } from "../actionAutofill";
 import EquipmentSearch from "./EquipmentSearch";
 import MultiSelectTags from "./MultiSelectTags";
 
 const STATUS_OPTIONS = ["Open", "In Progress", "Closed", "Waiting Stoppage"];
 const CONTRACTOR_OPTIONS = ["RHI", "ASEC"];
-
-// "26 Mar 2026"-style (or any parseable) date -> "2026-03-26" for
-// <input type="date">, using local date parts so it can't shift by a day
-// against a UTC conversion.
-function toISODate(value) {
-  if (!value) return "";
-  const d = new Date(value);
-  if (isNaN(d)) return "";
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
-}
-
-// Picks the most recently changed Oil Change Log row for an equipment (it
-// can have several lubrication points) — used to prefill Last Change Date
-// and to default which lubrication point a Last Change edit applies to.
-function latestOilChangeFor(oilChanges, equipmentCode) {
-  const rows = (oilChanges || []).filter((o) => o.equipmentCode === equipmentCode && o.changeDate);
-  if (rows.length === 0) return null;
-  return rows.reduce((a, b) => (new Date(a.changeDate) > new Date(b.changeDate) ? a : b));
-}
-
-// Most recent PRIOR action for an equipment (excluding the action being
-// edited itself) — its Agreed Action becomes this action's starting
-// "Prev. Month Agreed Action", so a reviewer can see whether last time's
-// agreed action was actually followed up on.
-function lastAgreedActionFor(allActions, equipmentCode, excludeId) {
-  const rows = (allActions || []).filter((a) => a.equipmentCode === equipmentCode && a._id !== excludeId && a.agreedAction);
-  if (rows.length === 0) return "";
-  const latest = rows.reduce((a, b) =>
-    new Date(a.revisionDate || a.sampleDate || 0) > new Date(b.revisionDate || b.sampleDate || 0) ? a : b
-  );
-  return latest.agreedAction || "";
-}
-
-// Equipment Registry -> action-field autofill: Description, Oil Type
-// (Lubricant Grade), and Contractor come straight from the registry row;
-// Last Change Date is inherited from that equipment's Oil Change Log entry;
-// Prev. Month Agreed Action is inherited from this equipment's last action.
-function autofillFromEquipment(code, { equipmentRegistry, oilChanges, allActions, excludeId }) {
-  const reg = (equipmentRegistry || []).find((r) => r.code === code);
-  const latest = latestOilChangeFor(oilChanges, code);
-  return {
-    equipmentCode: code,
-    description: reg?.description || "",
-    oilType: reg?.lubricant || "",
-    contractor: reg?.contractor || "",
-    lastChange: latest ? toISODate(latest.changeDate) : "",
-    prevMonthAgreedAction: lastAgreedActionFor(allActions, code, excludeId),
-  };
-}
 
 export default function EditActionModal({
   action,

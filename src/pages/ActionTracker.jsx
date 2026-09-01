@@ -3,6 +3,7 @@ import { useTheme } from "../ThemeContext";
 import { formatDate } from "../parsers";
 import EquipmentSearch from "../components/EquipmentSearch";
 import EditActionModal from "../components/EditActionModal";
+import GenerateMonthlyActionsModal from "../components/GenerateMonthlyActionsModal";
 
 const STATUS_COLOR_KEY = { Open: "danger", "In Progress": "warning", "Waiting Stoppage": "accent", Closed: "success" };
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -32,6 +33,7 @@ export default function ActionTracker({
   const [expanded, setExpanded] = useState(null);
   const [editing, setEditing] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [generating, setGenerating] = useState(false);
 
   const registry = equipmentRegistry || [];
   const areas = ["All", ...Array.from(new Set(registry.map((r) => r.area).filter(Boolean)))];
@@ -184,7 +186,10 @@ export default function ActionTracker({
               {a}
             </button>
           ))}
-        <button style={{ ...s.btnPrimary, marginLeft: "auto" }} onClick={() => setEditing({ action: { equipmentCode: "" }, isNew: true })}>
+        <button style={{ ...s.btn, marginLeft: "auto" }} onClick={() => setGenerating(true)}>
+          <i className="ti ti-calendar-plus" aria-hidden="true" /> Generate Monthly Actions
+        </button>
+        <button style={s.btnPrimary} onClick={() => setEditing({ action: { equipmentCode: "" }, isNew: true })}>
           <i className="ti ti-plus" aria-hidden="true" /> Add Action
         </button>
       </div>
@@ -275,6 +280,17 @@ export default function ActionTracker({
           onClose={() => !saving && setEditing(null)}
           onSave={handleSave}
           onDelete={editing.isNew ? null : handleDelete}
+        />
+      )}
+
+      {generating && (
+        <GenerateMonthlyActionsModal
+          samples={samples}
+          actions={actions}
+          equipmentRegistry={registry}
+          oilChanges={oilChanges}
+          onAddAction={onAddAction}
+          onClose={() => setGenerating(false)}
         />
       )}
     </div>

@@ -212,8 +212,12 @@ export function actionToRow(a) {
 export function nextAcNo(actions) {
   let max = 0;
   for (const a of actions || []) {
-    const m = String(a.acNo || "").match(/(\d+)/);
-    if (m) max = Math.max(max, parseInt(m[1], 10));
+    // Ac. No. values look like "0-101" (app-generated) or "O-101" (the
+    // sheet's own formula-generated rows, letter O not digit 0) — take the
+    // LAST digit run, not the first, or "0-101" reads as just "0" and
+    // nextAcNo never advances past "0-1" for anything the app itself created.
+    const groups = String(a.acNo || "").match(/\d+/g);
+    if (groups) max = Math.max(max, parseInt(groups[groups.length - 1], 10));
   }
   return `0-${max + 1}`;
 }
