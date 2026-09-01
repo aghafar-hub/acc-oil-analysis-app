@@ -403,10 +403,17 @@ function AppShell({ config, setConfig }) {
             <Equipment
               samples={samples}
               equipmentRegistry={equipmentRegistry}
+              actions={actions}
+              oilChanges={oilChanges}
+              actionRegistry={actionRegistry}
               onSelectSample={goToReport}
               onEditSample={onEditSample}
               onDeleteSample={onDeleteSample}
               onOpenReport={goToOilReport}
+              onAddAction={onAddAction}
+              onUpdateAction={onUpdateAction}
+              onDeleteAction={onDeleteAction}
+              onSaveOilChange={onSaveOilChange}
             />
           )}
           {page === "report" && selectedEquipment && (

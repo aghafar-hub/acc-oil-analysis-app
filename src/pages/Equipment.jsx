@@ -1,462 +1,592 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useTheme } from "../ThemeContext";
 import { formatDate } from "../parsers";
-import EquipmentSearch from "../components/EquipmentSearch";
+import { statusColor } from "../theme";
 import EditSampleModal from "../components/EditSampleModal";
+import EditActionModal from "../components/EditActionModal";
+import EditOilChangeModal from "../components/EditOilChangeModal";
 
-function statusColor(T, status) {
-  if (status === "Alert") return T.danger;
-  if (status === "Caution" || status === "Warning") return T.warning;
-  if (status === "Normal") return T.success;
-  return T.textSecondary;
-}
+const STATUS_ACTION_COLOR = { Open: "danger", "In Progress": "warning", "Waiting Stoppage": "accent", Closed: "success" };
 
-export default function Equipment({ samples, equipmentRegistry, onSelectSample, onEditSample, onDeleteSample, onOpenReport }) {
+// Single search box up top, then everything about the selected equipment —
+// registry details, sample timeline, oil change history, actions taken —
+// in one continuous card below it. Replaces the old two-tab
+// (Registry / Sample History) accordion-list layout; approved design at
+// https://claude.ai/code/artifact/718df601-b12d-4a89-a159-dcf0090b9bf7.
+export default function Equipment({
+  samples,
+  equipmentRegistry,
+  actions,
+  oilChanges,
+  actionRegistry,
+  onSelectSample,
+  onEditSample,
+  onDeleteSample,
+  onOpenReport,
+  onAddAction,
+  onUpdateAction,
+  onDeleteAction,
+  onSaveOilChange,
+}) {
   const { T, s } = useTheme();
-  const [tab, setTab] = useState("registry");
-  const [assetClass, setAssetClass] = useState("All Classes");
-  const [equipCode, setEquipCode] = useState("");
-  const [areaFilter, setAreaFilter] = useState("All");
-  const [expanded, setExpanded] = useState(null);
-  const [editing, setEditing] = useState(null);
-
   const registry = equipmentRegistry || [];
-  const areas = ["All", ...Array.from(new Set(registry.map((r) => r.area).filter(Boolean)))];
-  const areaCodes = areaFilter === "All" ? null : new Set(registry.filter((r) => r.area === areaFilter).map((r) => r.code));
-  const assetClasses = ["All Classes", ...Array.from(new Set(registry.map((r) => r.assetClass).filter(Boolean))).sort()];
+  const [query, setQuery] = useState("");
+  const [open, setOpen] = useState(false);
+  const [code, setCode] = useState("");
+  const [editingSample, setEditingSample] = useState(null);
+  const [editingAction, setEditingAction] = useState(null); // { action, isNew }
+  const [savingAction, setSavingAction] = useState(false);
+  const [editingOilChange, setEditingOilChange] = useState(null);
+  const [savingOilChange, setSavingOilChange] = useState(false);
 
-  const byEquip = useMemo(() => {
-    const map = {};
-    samples.forEach((sm) => {
-      if (!sm.unitId) return;
-      (map[sm.unitId] ||= []).push(sm);
-    });
-    return map;
-  }, [samples]);
-
-  const filteredRegistry = registry.filter((r) => {
-    const classOk = assetClass === "All Classes" || r.assetClass === assetClass;
-    const codeOk = !equipCode || equipCode === "All" || r.code === equipCode;
-    const areaOk = !areaCodes || areaCodes.has(r.code);
-    return classOk && codeOk && areaOk;
-  });
-
-  function latestFor(code) {
-    const list = byEquip[code] || [];
-    return list.length ? [...list].sort((a, b) => new Date(b.sampledDate || 0) - new Date(a.sampledDate || 0))[0] : null;
+  function latestSampleFor(c) {
+    return (samples || []).filter((sm) => sm.unitId === c).sort((a, b) => new Date(b.sampledDate) - new Date(a.sampledDate))[0] || null;
   }
 
-  const tabBtn = (active) => ({
-    padding: "8px 20px",
-    cursor: "pointer",
-    fontSize: 13,
-    fontWeight: active ? 700 : 400,
-    color: active ? T.accent : T.textSecondary,
-    borderBottom: active ? `2px solid ${T.accent}` : "2px solid transparent",
-    background: "transparent",
-    border: "none",
-    outline: "none",
-  });
+  const q = query.trim().toLowerCase();
+  const results = !q
+    ? registry
+    : registry.filter(
+        (r) =>
+          r.code.toLowerCase().includes(q) || (r.description || "").toLowerCase().includes(q) || (r.area || "").toLowerCase().includes(q)
+      );
+
+  function selectCode(c) {
+    setCode(c);
+    setQuery("");
+    setOpen(false);
+  }
+
+  const reg = code ? registry.find((r) => r.code === code) : null;
+  const samplesForEquip = code
+    ? (samples || []).filter((sm) => sm.unitId === code).sort((a, b) => new Date(b.sampledDate) - new Date(a.sampledDate))
+    : [];
+  const latest = samplesForEquip[0] || null;
+  const oilChangesForEquip = code ? (oilChanges || []).filter((o) => o.equipmentCode === code) : [];
+  const actionsForEquip = code
+    ? (actions || [])
+        .filter((a) => (a.equipmentCode || a.unitId) === code)
+        .sort((a, b) => new Date(b.revisionDate || b.sampleDate || 0) - new Date(a.revisionDate || a.sampleDate || 0))
+    : [];
+  const openActionsCount = actionsForEquip.filter((a) => a.status !== "Closed").length;
+  const nextDue = [...oilChangesForEquip].filter((o) => o.nextDueDate).sort((a, b) => new Date(a.nextDueDate) - new Date(b.nextDueDate))[0];
+
+  function handleLogOilChange() {
+    if (oilChangesForEquip.length === 0) return;
+    setEditingOilChange(nextDue || oilChangesForEquip[0]);
+  }
+
+  async function handleSaveOilChange(updated) {
+    setSavingOilChange(true);
+    try {
+      await onSaveOilChange(updated);
+      setEditingOilChange(null);
+    } catch {
+      // toast already shown
+    } finally {
+      setSavingOilChange(false);
+    }
+  }
+
+  async function handleSaveAction(payload) {
+    setSavingAction(true);
+    try {
+      if (editingAction.isNew) await onAddAction(payload);
+      else await onUpdateAction(payload);
+      setEditingAction(null);
+    } catch {
+      // toast already shown
+    } finally {
+      setSavingAction(false);
+    }
+  }
+  async function handleDeleteAction() {
+    setSavingAction(true);
+    try {
+      await onDeleteAction(editingAction.action);
+      setEditingAction(null);
+    } catch {
+      // toast already shown
+    } finally {
+      setSavingAction(false);
+    }
+  }
+
+  const tag = (text) => (
+    <span
+      key={text}
+      style={{
+        fontSize: 11,
+        fontWeight: 600,
+        padding: "3px 9px",
+        borderRadius: 5,
+        background: T.cardSubBg,
+        color: T.textSecondary,
+        border: `1px solid ${T.border2}`,
+      }}
+    >
+      {text}
+    </span>
+  );
+
+  const sectionLabel = (icon, label, count) => (
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+      <span
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          fontSize: 12,
+          fontWeight: 700,
+          textTransform: "uppercase",
+          letterSpacing: 0.5,
+          color: T.textSecondary,
+        }}
+      >
+        <i className={`ti ${icon}`} style={{ color: T.accent, fontSize: 14 }} aria-hidden="true" />
+        {label}
+      </span>
+      {count != null && <span style={{ fontSize: 11, color: T.textMuted }}>{count}</span>}
+    </div>
+  );
+
+  const cardSection = (children, extraStyle) => (
+    <div style={{ padding: "20px 24px", borderTop: `1px solid ${T.border}`, ...extraStyle }}>{children}</div>
+  );
 
   return (
     <div>
-      <div style={{ display: "flex", borderBottom: `1px solid ${T.border}`, marginBottom: 16 }}>
-        <button style={tabBtn(tab === "registry")} onClick={() => setTab("registry")}>
-          <i className="ti ti-database" aria-hidden="true" style={{ marginRight: 6 }} />
-          Equipment Registry ({registry.length})
-        </button>
-        <button style={tabBtn(tab === "samples")} onClick={() => setTab("samples")}>
-          <i className="ti ti-flask" aria-hidden="true" style={{ marginRight: 6 }} />
-          Sample History ({Object.keys(byEquip).length})
-        </button>
+      {/* ── search ─────────────────────────────────────────────────────── */}
+      <div style={{ textAlign: code ? "left" : "center", padding: code ? "0 0 20px" : "40px 20px 30px", transition: "padding 0.15s" }}>
+        {!code && (
+          <>
+            <div
+              style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase", color: T.textMuted, marginBottom: 8 }}
+            >
+              Equipment Lookup
+            </div>
+            <p style={{ fontSize: 24, fontWeight: 800, margin: "0 0 8px", color: T.textPrimary }}>Find any piece of equipment</p>
+            <p style={{ fontSize: 13, color: T.textSecondary, margin: "0 auto 22px", maxWidth: 440 }}>
+              Search by code or description to see its full record — samples, oil changes, and actions in one place.
+            </p>
+          </>
+        )}
+        <div style={{ position: "relative", width: "100%", maxWidth: code ? 420 : 520, margin: code ? 0 : "0 auto" }}>
+          <div style={{ position: "relative" }}>
+            <i
+              className="ti ti-search"
+              style={{
+                position: "absolute",
+                left: code ? 12 : 16,
+                top: "50%",
+                transform: "translateY(-50%)",
+                color: T.textMuted,
+                fontSize: code ? 14 : 16,
+                pointerEvents: "none",
+              }}
+              aria-hidden="true"
+            />
+            <input
+              style={{
+                ...s.input,
+                padding: code ? "9px 32px 9px 34px" : "13px 40px 13px 44px",
+                fontSize: code ? 13 : 15,
+                borderRadius: code ? 8 : 10,
+              }}
+              value={open ? query : code ? `${code}${reg ? " — " + reg.description : ""}` : query}
+              placeholder="Search equipment code or description…"
+              onFocus={() => {
+                setOpen(true);
+                setQuery("");
+              }}
+              onChange={(e) => {
+                setQuery(e.target.value);
+                setOpen(true);
+              }}
+              onBlur={() => setTimeout(() => setOpen(false), 150)}
+            />
+            {code && !open && (
+              <button
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  setCode("");
+                }}
+                style={{
+                  position: "absolute",
+                  right: 8,
+                  top: "50%",
+                  transform: "translateY(-50%)",
+                  background: "none",
+                  border: "none",
+                  color: T.textMuted,
+                  cursor: "pointer",
+                  fontSize: 16,
+                }}
+                aria-label="Clear"
+              >
+                ×
+              </button>
+            )}
+          </div>
+          {open && (
+            <div
+              style={{
+                position: "absolute",
+                zIndex: 99,
+                top: "100%",
+                left: 0,
+                right: 0,
+                background: T.cardBg,
+                border: `1px solid ${T.border}`,
+                borderRadius: 10,
+                marginTop: 4,
+                maxHeight: 320,
+                overflowY: "auto",
+                textAlign: "left",
+                boxShadow: `0 8px 24px ${T.appBg}aa`,
+              }}
+            >
+              {results.length === 0 && (
+                <div style={{ padding: 16, color: T.textMuted, fontSize: 12.5, textAlign: "center" }}>No matches</div>
+              )}
+              {results.map((r) => {
+                const ls = latestSampleFor(r.code);
+                const color = ls ? statusColor(T, ls.reportStatus) : T.textMuted;
+                return (
+                  <div
+                    key={r.code}
+                    onMouseDown={() => selectCode(r.code)}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 10,
+                      padding: "10px 16px",
+                      cursor: "pointer",
+                      borderBottom: `1px solid ${T.border2}`,
+                    }}
+                  >
+                    <span style={{ width: 7, height: 7, borderRadius: "50%", background: color, flexShrink: 0 }} />
+                    <span style={{ fontFamily: "monospace", fontWeight: 700, fontSize: 13, color: T.accent }}>{r.code}</span>
+                    <span
+                      style={{
+                        fontSize: 12,
+                        color: T.textSecondary,
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                        flex: 1,
+                      }}
+                    >
+                      {r.description}
+                    </span>
+                    {r.area && (
+                      <span style={{ fontSize: 10.5, color: T.textMuted, background: T.cardSubBg, borderRadius: 4, padding: "2px 7px" }}>
+                        {r.area}
+                      </span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
       </div>
 
-      {areas.length > 1 && (
-        <div style={{ display: "flex", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
-          {areas.map((a) => (
-            <button
-              key={a}
-              style={{
-                ...s.btn,
-                fontSize: 12,
-                background: areaFilter === a ? T.accent : "transparent",
-                color: areaFilter === a ? T.accentText : T.textSecondary,
-                borderColor: areaFilter === a ? T.accent : T.border,
-              }}
-              onClick={() => setAreaFilter(a)}
-            >
-              {a}
-            </button>
+      {!code && (
+        <div
+          style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))", gap: 14, maxWidth: 760, margin: "0 auto" }}
+        >
+          {[
+            ["ti-timeline", "Sample timeline", "Every reading for this equipment, newest first, with severity at a glance."],
+            ["ti-droplet", "Oil change history", "Every lubrication point — last change, next due, and how overdue it is."],
+            ["ti-clipboard-check", "Actions taken", "Every action ever raised for this equipment, with status and outcome."],
+          ].map(([icon, title, desc]) => (
+            <div key={title} style={{ ...s.card, marginBottom: 0 }}>
+              <i className={`ti ${icon}`} style={{ color: T.accent, fontSize: 18, marginBottom: 8, display: "block" }} aria-hidden="true" />
+              <div style={{ fontSize: 12.5, fontWeight: 700, marginBottom: 3 }}>{title}</div>
+              <div style={{ fontSize: 11.5, color: T.textSecondary, lineHeight: 1.5 }}>{desc}</div>
+            </div>
           ))}
         </div>
       )}
 
-      <div style={{ display: "flex", gap: 12, marginBottom: 16, flexWrap: "wrap", alignItems: "flex-end" }}>
-        <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
-          <span style={{ fontSize: 10, color: T.textMuted, fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.6 }}>
-            Equipment
-          </span>
-          <EquipmentSearch
-            options={registry}
-            value={equipCode || "All"}
-            onChange={(v) => setEquipCode(v === "All" ? "" : v)}
-            allowAll
-            width={220}
-            placeholder="All Equipment"
-          />
-        </div>
-        <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
-          <span style={{ fontSize: 10, color: T.textMuted, fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.6 }}>
-            Asset Class
-          </span>
-          <select style={{ ...s.select, minWidth: 160, fontSize: 12 }} value={assetClass} onChange={(e) => setAssetClass(e.target.value)}>
-            {assetClasses.map((c) => (
-              <option key={c}>{c}</option>
-            ))}
-          </select>
-        </div>
-        {(equipCode || assetClass !== "All Classes") && (
-          <button
-            style={{ ...s.btn, fontSize: 12, color: T.danger, borderColor: T.danger }}
-            onClick={() => {
-              setEquipCode("");
-              setAssetClass("All Classes");
-            }}
-          >
-            <i className="ti ti-x" aria-hidden="true" /> Clear
-          </button>
-        )}
-        <span style={{ fontSize: 12, color: T.textMuted, marginLeft: "auto" }}>
-          {filteredRegistry.length} of {registry.length} equipment
-        </span>
-      </div>
-
-      {tab === "registry" && (
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          {filteredRegistry.map((r) => {
-            const latest = latestFor(r.code);
-            const count = (byEquip[r.code] || []).length;
-            const hasAlert = (byEquip[r.code] || []).some((v) => v.reportStatus === "Alert");
-            const isOpen = expanded === r.code;
-            const color = statusColor(T, latest == null ? void 0 : latest.reportStatus);
-            return (
-              <div
-                key={r.code}
-                style={{ ...s.card, padding: 0, overflow: "hidden", border: `1px solid ${hasAlert ? T.danger + "66" : T.border}` }}
-              >
-                <div
-                  style={{ padding: "12px 16px", display: "flex", alignItems: "center", gap: 10, cursor: "pointer", flexWrap: "wrap" }}
-                  onClick={() => setExpanded(isOpen ? null : r.code)}
-                >
-                  <i
-                    className={`ti ti-chevron-${isOpen ? "down" : "right"}`}
-                    style={{ fontSize: 13, color: T.textSecondary }}
-                    aria-hidden="true"
-                  />
-                  <div style={{ minWidth: 130, flex: 1 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                      {hasAlert && (
-                        <span
-                          style={{
-                            width: 7,
-                            height: 7,
-                            borderRadius: "50%",
-                            background: T.danger,
-                            flexShrink: 0,
-                            animation: "pulse 1.2s ease-in-out infinite",
-                          }}
-                        />
-                      )}
-                      <span style={{ fontFamily: "monospace", fontWeight: 700, fontSize: 13, color: T.accent }}>{r.code}</span>
-                      <span style={{ fontSize: 11, background: T.cardSubBg, color: T.textSecondary, borderRadius: 4, padding: "1px 7px" }}>
-                        {r.assetClass}
-                      </span>
-                    </div>
-                    <div
-                      style={{
-                        fontSize: 11,
-                        color: T.textSecondary,
-                        marginTop: 2,
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                        whiteSpace: "nowrap",
-                        maxWidth: 280,
-                      }}
-                    >
-                      {r.description}
-                    </div>
-                  </div>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginLeft: "auto" }}>
-                    <span style={{ fontSize: 11, color: T.textMuted }}>{r.lubricant}</span>
-                    <span style={{ fontSize: 11, color: T.textMuted }}>every {r.interval}</span>
-                    {latest ? (
-                      <span style={s.badge(latest.reportStatus)}>{latest.reportStatus}</span>
-                    ) : (
-                      <span style={{ background: T.cardSubBg, color: T.textMuted, borderRadius: 4, padding: "2px 8px", fontSize: 11 }}>
-                        No samples
-                      </span>
-                    )}
-                    {count > 0 && (
-                      <span style={{ fontSize: 11, color: T.textMuted }}>
-                        {count} sample{count !== 1 ? "s" : ""}
-                      </span>
-                    )}
-                    {onOpenReport && (
-                      <button
-                        style={{ ...s.btnPrimary, padding: "4px 10px", fontSize: 11, flexShrink: 0 }}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onOpenReport(r.code);
-                        }}
-                      >
-                        <i className="ti ti-chart-line" aria-hidden="true" /> Report
-                      </button>
-                    )}
-                  </div>
-                </div>
-                {isOpen && (
-                  <div style={{ borderTop: `1px solid ${T.border}`, background: T.cardSubBg }}>
-                    <div
-                      style={{ padding: "10px 16px", display: "flex", gap: 10, flexWrap: "wrap", borderBottom: `1px solid ${T.border}` }}
-                    >
-                      {[
-                        ["Asset ID", r.assetId],
-                        ["Manufacturer", r.manufacturer],
-                        ["Model", r.model],
-                        ["Lubricant", r.lubricant],
-                        ["Interval", r.interval],
-                        ["Asset Class", r.assetClass],
-                      ].map(([label, value]) =>
-                        value ? (
-                          <div
-                            key={label}
-                            style={{ background: T.cardBg, border: `1px solid ${T.border}`, borderRadius: 6, padding: "4px 10px" }}
-                          >
-                            <div style={{ fontSize: 9, color: T.textMuted, marginBottom: 1 }}>{label}</div>
-                            <div style={{ fontSize: 12, color: T.textPrimary }}>{value}</div>
-                          </div>
-                        ) : null
-                      )}
-                    </div>
-                    {count === 0 ? (
-                      <div style={{ padding: "20px 16px", textAlign: "center", color: T.textMuted, fontSize: 13 }}>
-                        No samples recorded for this equipment.
-                      </div>
-                    ) : (
-                      <div style={{ padding: "12px 16px", display: "flex", flexDirection: "column", gap: 8 }}>
-                        <p style={{ margin: "0 0 8px", fontSize: 12, fontWeight: 700, color: T.textPrimary }}>
-                          <i className="ti ti-flask" aria-hidden="true" style={{ marginRight: 6 }} />
-                          {count} Sample{count !== 1 ? "s" : ""}
-                        </p>
-                        {[...byEquip[r.code]]
-                          .sort((a, b) => new Date(b.sampledDate || 0) - new Date(a.sampledDate || 0))
-                          .map((v, i) => {
-                            const c = statusColor(T, v.reportStatus);
-                            return (
-                              <div
-                                key={v._id || i}
-                                style={{ background: T.cardBg, border: `1px solid ${T.border}`, borderRadius: 8, padding: "10px 12px" }}
-                              >
-                                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6, flexWrap: "wrap" }}>
-                                  <span style={{ fontWeight: 600, fontSize: 12, color: T.textPrimary, whiteSpace: "nowrap" }}>
-                                    {formatDate(v.sampledDate)}
-                                  </span>
-                                  <span
-                                    style={{
-                                      background: c + "22",
-                                      color: c,
-                                      borderRadius: 4,
-                                      padding: "2px 8px",
-                                      fontSize: 11,
-                                      fontWeight: 700,
-                                    }}
-                                  >
-                                    {v.reportStatus || "—"}
-                                  </span>
-                                  {v.equipmentRating && <span style={s.badge(v.equipmentRating)}>{v.equipmentRating}</span>}
-                                  {v.lubricantRating && <span style={s.badge(v.lubricantRating)}>{v.lubricantRating}</span>}
-                                  {v.contaminationRating && <span style={s.badge(v.contaminationRating)}>{v.contaminationRating}</span>}
-                                  <div style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
-                                    {onSelectSample && (
-                                      <button
-                                        style={{ ...s.btnPrimary, padding: "3px 8px", fontSize: 11 }}
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          onSelectSample(v);
-                                        }}
-                                      >
-                                        <i className="ti ti-file-analytics" aria-hidden="true" /> Report
-                                      </button>
-                                    )}
-                                    {onEditSample && (
-                                      <button
-                                        style={{ ...s.btn, padding: "3px 8px", fontSize: 11 }}
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          setEditing(v);
-                                        }}
-                                      >
-                                        <i className="ti ti-edit" aria-hidden="true" />
-                                      </button>
-                                    )}
-                                    {onDeleteSample && (
-                                      <button
-                                        style={{ ...s.btn, padding: "3px 8px", fontSize: 11, color: T.danger, borderColor: T.danger }}
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          window.confirm("Delete this sample?") && onDeleteSample(v);
-                                        }}
-                                      >
-                                        <i className="ti ti-trash" aria-hidden="true" />
-                                      </button>
-                                    )}
-                                  </div>
-                                </div>
-                                <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
-                                  {[
-                                    ["Visc@40°C", v.visc40C],
-                                    ["TAN", v.tan],
-                                    ["Water", v.water],
-                                    ["PQ", v.pqIndex],
-                                    ["Sample ID", v.sampleId],
-                                  ].map(([label, value]) =>
-                                    value ? (
-                                      <div key={label}>
-                                        <span style={{ fontSize: 10, color: T.textMuted }}>{label}: </span>
-                                        <span style={{ fontSize: 11, color: T.textSecondary, fontFamily: "monospace" }}>{value}</span>
-                                      </div>
-                                    ) : null
-                                  )}
-                                </div>
-                              </div>
-                            );
-                          })}
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      {tab === "samples" && (
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          {Object.entries(byEquip)
-            .filter(([code]) => !equipCode || equipCode === "All" || code === equipCode)
-            .sort((a, b) => a[0].localeCompare(b[0]))
-            .map(([code, list]) => {
-              const reg = registry.find((r) => r.code === code);
-              const sorted = [...list].sort((a, b) => new Date(b.sampledDate || 0) - new Date(a.sampledDate || 0));
-              const latest = sorted[0];
-              const color = statusColor(T, latest == null ? void 0 : latest.reportStatus);
-              const key = code + "_s";
-              const isOpen = expanded === key;
-              return (
-                <div key={code} style={{ ...s.card, padding: 0, overflow: "hidden" }}>
-                  <div
-                    style={{ padding: "12px 16px", display: "flex", alignItems: "center", gap: 10, cursor: "pointer", flexWrap: "wrap" }}
-                    onClick={() => setExpanded(isOpen ? null : key)}
-                  >
-                    <i
-                      className={`ti ti-chevron-${isOpen ? "down" : "right"}`}
-                      style={{ fontSize: 13, color: T.textSecondary }}
-                      aria-hidden="true"
-                    />
-                    <div style={{ flex: 1, minWidth: 130 }}>
-                      <div style={{ fontFamily: "monospace", fontWeight: 700, fontSize: 13, color: T.accent }}>{code}</div>
-                      <div style={{ fontSize: 11, color: T.textSecondary }}>
-                        {(reg == null ? void 0 : reg.description) || ""} · {list.length} sample{list.length !== 1 ? "s" : ""}
-                      </div>
-                    </div>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginLeft: "auto" }}>
-                      <span style={{ fontSize: 11, color: T.textMuted }}>
-                        Latest: {formatDate(latest == null ? void 0 : latest.sampledDate)}
-                      </span>
-                      <span style={{ background: color + "22", color, borderRadius: 4, padding: "2px 8px", fontSize: 11, fontWeight: 700 }}>
-                        {(latest == null ? void 0 : latest.reportStatus) || "—"}
-                      </span>
-                    </div>
-                  </div>
-                  {isOpen && (
-                    <div
-                      style={{
-                        borderTop: `1px solid ${T.border}`,
-                        background: T.cardSubBg,
-                        padding: "12px 16px",
-                        display: "flex",
-                        flexDirection: "column",
-                        gap: 6,
-                      }}
-                    >
-                      {sorted.map((v, i) => {
-                        const c = statusColor(T, v.reportStatus);
-                        return (
-                          <div
-                            key={v._id || i}
-                            style={{ background: T.cardBg, border: `1px solid ${T.border}`, borderRadius: 8, padding: "10px 12px" }}
-                          >
-                            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                              <span style={{ fontWeight: 600, fontSize: 12 }}>{formatDate(v.sampledDate)}</span>
-                              <span
-                                style={{
-                                  background: c + "22",
-                                  color: c,
-                                  borderRadius: 4,
-                                  padding: "2px 8px",
-                                  fontSize: 11,
-                                  fontWeight: 700,
-                                }}
-                              >
-                                {v.reportStatus || "—"}
-                              </span>
-                              {v.equipmentRating && <span style={s.badge(v.equipmentRating)}>{v.equipmentRating}</span>}
-                              {v.lubricantRating && <span style={s.badge(v.lubricantRating)}>{v.lubricantRating}</span>}
-                              <div style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
-                                {onSelectSample && (
-                                  <button
-                                    style={{ ...s.btnPrimary, padding: "3px 8px", fontSize: 11 }}
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      onSelectSample(v);
-                                    }}
-                                  >
-                                    <i className="ti ti-file-analytics" aria-hidden="true" /> Report
-                                  </button>
-                                )}
-                                {onEditSample && (
-                                  <button
-                                    style={{ ...s.btn, padding: "3px 8px", fontSize: 11 }}
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setEditing(v);
-                                    }}
-                                  >
-                                    <i className="ti ti-edit" aria-hidden="true" />
-                                  </button>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
+      {/* ── equipment card ─────────────────────────────────────────────── */}
+      {code && (
+        <div style={{ background: T.cardBg, border: `1px solid ${T.border}`, borderRadius: 14, overflow: "hidden" }}>
+          <div style={{ padding: "20px 24px" }}>
+            <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
+              <div>
+                <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                  <span style={{ fontFamily: "monospace", fontSize: 22, fontWeight: 700, color: T.textHighlight }}>{code}</span>
+                  {latest ? (
+                    <span style={s.badge(latest.reportStatus)}>
+                      {latest.reportStatus === "Alert" && <span style={{ ...s.alertPulse, marginRight: 5 }} />}
+                      {latest.reportStatus} · {formatDate(latest.sampledDate)}
+                    </span>
+                  ) : (
+                    <span style={{ ...s.badge(), background: T.cardSubBg, color: T.textMuted }}>No samples yet</span>
                   )}
                 </div>
-              );
-            })}
+                <div style={{ fontSize: 14, color: T.textSecondary, marginTop: 4 }}>{reg?.description || "—"}</div>
+                <div style={{ display: "flex", gap: 6, marginTop: 10, flexWrap: "wrap" }}>
+                  {[reg?.assetClass, reg?.area, reg?.contractor].filter(Boolean).map(tag)}
+                </div>
+              </div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <button style={s.btn} onClick={handleLogOilChange} disabled={oilChangesForEquip.length === 0}>
+                  <i className="ti ti-droplet-plus" aria-hidden="true" /> Log Oil Change
+                </button>
+                <button style={s.btn} onClick={() => setEditingAction({ action: { equipmentCode: code }, isNew: true })}>
+                  <i className="ti ti-clipboard-plus" aria-hidden="true" /> New Action
+                </button>
+                {onOpenReport && (
+                  <button style={s.btnPrimary} onClick={() => onOpenReport(code)}>
+                    <i className="ti ti-file-analytics" aria-hidden="true" /> Full Report
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: 10, marginTop: 18 }}>
+              {[
+                ["Total Samples", samplesForEquip.length, null],
+                ["Latest Result", latest ? latest.reportStatus : "—", latest ? statusColor(T, latest.reportStatus) : null],
+                ["Open Actions", openActionsCount, openActionsCount > 0 ? T.danger : T.success],
+                [
+                  "Next Oil Change",
+                  nextDue ? formatDate(nextDue.nextDueDate) : "—",
+                  nextDue?.status === "Overdue" ? T.danger : null,
+                  nextDue?.lubricationPoint,
+                ],
+              ].map(([label, val, color, sub]) => (
+                <div
+                  key={label}
+                  style={{ background: T.cardSubBg, border: `1px solid ${T.border2}`, borderRadius: 8, padding: "11px 13px" }}
+                >
+                  <div
+                    style={{
+                      fontSize: 10.5,
+                      fontWeight: 600,
+                      letterSpacing: 0.4,
+                      textTransform: "uppercase",
+                      color: T.textMuted,
+                      marginBottom: 5,
+                    }}
+                  >
+                    {label}
+                  </div>
+                  <div style={{ fontSize: 15, fontWeight: 700, color: color || T.textHighlight }}>{val}</div>
+                  {sub && <div style={{ fontSize: 11, color: T.textMuted, marginTop: 2 }}>{sub}</div>}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {cardSection(
+            <>
+              {sectionLabel("ti-info-square-rounded", "Registry Details")}
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(130px,1fr))", gap: "14px 20px" }}>
+                {[
+                  ["Asset ID", reg?.assetId],
+                  ["Asset Class", reg?.assetClass],
+                  ["Manufacturer", reg?.manufacturer],
+                  ["Model", reg?.model],
+                  ["Lubricant", reg?.lubricant],
+                  ["Change Interval", reg?.interval],
+                  ["Area", reg?.area],
+                  ["Contractor", reg?.contractor],
+                ].map(([k, v]) => (
+                  <div key={k}>
+                    <div style={{ fontSize: 10.5, color: T.textMuted, marginBottom: 2 }}>{k}</div>
+                    <div style={{ fontSize: 12.5, color: T.textPrimary, fontWeight: 500 }}>{v || "—"}</div>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+
+          {cardSection(
+            <>
+              {sectionLabel("ti-timeline", "Sample Timeline", samplesForEquip.length)}
+              {samplesForEquip.length === 0 ? (
+                <div style={{ color: T.textMuted, fontSize: 12.5 }}>No samples recorded for this equipment.</div>
+              ) : (
+                samplesForEquip.map((sm, i) => {
+                  const color = statusColor(T, sm.reportStatus);
+                  return (
+                    <div
+                      key={sm._id || i}
+                      style={{
+                        display: "flex",
+                        gap: 11,
+                        padding: i === 0 ? "0 0 10px" : "10px 0",
+                        borderBottom: i < samplesForEquip.length - 1 ? `1px solid ${T.border2}` : "none",
+                      }}
+                    >
+                      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", paddingTop: 4 }}>
+                        <span style={{ width: 9, height: 9, borderRadius: "50%", background: color, flexShrink: 0 }} />
+                        {i < samplesForEquip.length - 1 && <span style={{ width: 1.5, flex: 1, background: T.border, marginTop: 4 }} />}
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 9, flexWrap: "wrap" }}>
+                          <span style={{ fontWeight: 700, fontSize: 12.5 }}>{formatDate(sm.sampledDate)}</span>
+                          <span style={s.badge(sm.reportStatus)}>{sm.reportStatus}</span>
+                        </div>
+                        <div style={{ fontSize: 11.5, color: T.textSecondary, marginTop: 5, display: "flex", flexWrap: "wrap", gap: 12 }}>
+                          <span>
+                            ID: <span style={{ fontFamily: "monospace", color: T.accent }}>{sm.sampleId || "—"}</span>
+                          </span>
+                          <span>Visc: {sm.visc40C ?? "—"} cSt</span>
+                          <span>Fe: {sm.wear?.Fe ?? "—"} ppm</span>
+                          <span>Si: {sm.contaminants?.Si ?? "—"} ppm</span>
+                          <span>Water: {sm.water ?? "—"}</span>
+                        </div>
+                      </div>
+                      <div style={{ display: "flex", gap: 5, flexShrink: 0 }}>
+                        {onSelectSample && (
+                          <button style={{ ...s.btn, padding: "3px 7px" }} onClick={() => onSelectSample(sm)} title="View report">
+                            <i className="ti ti-file-analytics" aria-hidden="true" />
+                          </button>
+                        )}
+                        {onEditSample && (
+                          <button style={{ ...s.btn, padding: "3px 7px" }} onClick={() => setEditingSample(sm)} title="Edit sample">
+                            <i className="ti ti-edit" aria-hidden="true" />
+                          </button>
+                        )}
+                        {onDeleteSample && (
+                          <button
+                            style={{ ...s.btn, padding: "3px 7px", color: T.danger, borderColor: T.danger }}
+                            onClick={() => window.confirm("Delete this sample?") && onDeleteSample(sm)}
+                            title="Delete sample"
+                          >
+                            <i className="ti ti-trash" aria-hidden="true" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </>
+          )}
+
+          {cardSection(
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(280px,1fr))", gap: 24 }}>
+              <div>
+                {sectionLabel("ti-droplet", "Oil Change History", oilChangesForEquip.length)}
+                {oilChangesForEquip.length === 0 ? (
+                  <div style={{ color: T.textMuted, fontSize: 12.5 }}>No oil change history for this equipment.</div>
+                ) : (
+                  oilChangesForEquip.map((oc, i) => (
+                    <div
+                      key={oc._id || i}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 10,
+                        padding: i === 0 ? "0 0 10px" : "10px 0",
+                        borderBottom: i < oilChangesForEquip.length - 1 ? `1px solid ${T.border2}` : "none",
+                      }}
+                    >
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 12.5, fontWeight: 600 }}>{oc.lubricationPoint}</div>
+                        <div style={{ fontSize: 11, color: T.textSecondary, marginTop: 2 }}>
+                          {oc.oilType} · last changed {formatDate(oc.changeDate) || "—"}
+                        </div>
+                      </div>
+                      <div style={{ textAlign: "right" }}>
+                        <div style={{ fontSize: 12, fontWeight: 600, color: oc.status === "Overdue" ? T.danger : T.textPrimary }}>
+                          {formatDate(oc.nextDueDate) || "—"}
+                        </div>
+                        <div style={{ fontSize: 10, color: T.textMuted }}>next due</div>
+                      </div>
+                      <button style={{ ...s.btn, padding: "3px 7px" }} onClick={() => setEditingOilChange(oc)} title="Edit">
+                        <i className="ti ti-edit" aria-hidden="true" />
+                      </button>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              <div>
+                {sectionLabel("ti-clipboard-check", "Actions Taken", actionsForEquip.length)}
+                {actionsForEquip.length === 0 ? (
+                  <div style={{ color: T.textMuted, fontSize: 12.5 }}>No actions recorded for this equipment.</div>
+                ) : (
+                  actionsForEquip.map((a, i) => (
+                    <div
+                      key={a._id || i}
+                      style={{
+                        padding: i === 0 ? "0 0 10px" : "10px 0",
+                        borderBottom: i < actionsForEquip.length - 1 ? `1px solid ${T.border2}` : "none",
+                      }}
+                    >
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                        <span style={{ fontFamily: "monospace", fontSize: 11, color: T.textMuted }}>{a.acNo}</span>
+                        <span
+                          style={{
+                            fontSize: 10.5,
+                            fontWeight: 700,
+                            padding: "2px 8px",
+                            borderRadius: 4,
+                            background: T[STATUS_ACTION_COLOR[a.status]] + "22",
+                            color: T[STATUS_ACTION_COLOR[a.status]] || T.textSecondary,
+                          }}
+                        >
+                          {a.status}
+                        </span>
+                        <span style={{ fontSize: 11, color: T.textMuted, marginLeft: "auto" }}>{formatDate(a.revisionDate)}</span>
+                        <button
+                          style={{ ...s.btn, padding: "2px 6px" }}
+                          onClick={() => setEditingAction({ action: a, isNew: false })}
+                          title="Edit"
+                        >
+                          <i className="ti ti-edit" aria-hidden="true" />
+                        </button>
+                      </div>
+                      <div style={{ fontSize: 12.5, marginTop: 6, lineHeight: 1.5 }}>{a.agreedAction || "—"}</div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
-      {editing && (
+      {editingSample && onEditSample && (
         <EditSampleModal
-          sample={editing}
-          onClose={() => setEditing(null)}
+          sample={editingSample}
+          onClose={() => setEditingSample(null)}
           onSave={(updated) => {
-            onEditSample(editing, updated);
-            setEditing(null);
+            onEditSample(editingSample, updated);
+            setEditingSample(null);
           }}
+        />
+      )}
+
+      {editingAction && (
+        <EditActionModal
+          action={editingAction.action}
+          isNew={editingAction.isNew}
+          allActions={actions}
+          samples={samples}
+          oilChanges={oilChanges}
+          equipmentRegistry={registry}
+          actionRegistry={actionRegistry}
+          saving={savingAction}
+          onClose={() => !savingAction && setEditingAction(null)}
+          onSave={handleSaveAction}
+          onDelete={editingAction.isNew ? null : handleDeleteAction}
+        />
+      )}
+
+      {editingOilChange && (
+        <EditOilChangeModal
+          oilChange={editingOilChange}
+          saving={savingOilChange}
+          onClose={() => setEditingOilChange(null)}
+          onSave={handleSaveOilChange}
         />
       )}
     </div>

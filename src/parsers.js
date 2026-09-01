@@ -109,6 +109,26 @@ export function intervalMonths(freqText) {
   return isNaN(n) ? null : n;
 }
 
+// Given a new change date and that lubrication point's frequency, the next
+// due date ("" if the frequency has no fixed interval) — and given a next
+// due date, whether that reads as Current or Overdue today. Shared by the
+// Oil Change Log page and the Equipment tab's own "Log Oil Change" flow so
+// both compute the exact same thing from the exact same date edit.
+export function computeOilChangeNextDue(changeDate, frequency) {
+  const months = intervalMonths(frequency);
+  if (!months || !changeDate) return "";
+  const d = new Date(changeDate);
+  if (isNaN(d)) return "";
+  d.setMonth(d.getMonth() + months);
+  return d.toISOString().slice(0, 10);
+}
+export function computeOilChangeStatus(nextDueDate) {
+  if (!nextDueDate) return "Current";
+  const d = new Date(nextDueDate);
+  if (isNaN(d)) return "Current";
+  return d <= new Date() ? "Overdue" : "Current";
+}
+
 // Computes { label: "OK"|"OVERDUE"|"MISSING", daysInfo } for one equipment,
 // given its most recent sample/tracker date and its registry interval.
 export function sampleTrackerStatus(lastDateStr, intervalText) {

@@ -1,22 +1,8 @@
 import { useMemo, useState } from "react";
 import { useTheme } from "../ThemeContext";
-import { formatDate, intervalMonths } from "../parsers";
+import { formatDate } from "../parsers";
 import EquipmentSearch from "../components/EquipmentSearch";
-
-function computeNextDue(changeDate, frequency) {
-  const months = intervalMonths(frequency);
-  if (!months || !changeDate) return "";
-  const d = new Date(changeDate);
-  if (isNaN(d)) return "";
-  d.setMonth(d.getMonth() + months);
-  return d.toISOString().slice(0, 10);
-}
-function computeStatus(nextDueDate) {
-  if (!nextDueDate) return "Current";
-  const d = new Date(nextDueDate);
-  if (isNaN(d)) return "Current";
-  return d <= new Date() ? "Overdue" : "Current";
-}
+import EditOilChangeModal from "../components/EditOilChangeModal";
 
 export default function OilChangeLog({ oilChanges, equipmentRegistry, onSave }) {
   const { T, s } = useTheme();
@@ -25,7 +11,6 @@ export default function OilChangeLog({ oilChanges, equipmentRegistry, onSave }) 
   const [statusFilter, setStatusFilter] = useState("All");
   const [expanded, setExpanded] = useState(null);
   const [editing, setEditing] = useState(null);
-  const [form, setForm] = useState({ changeDate: "", nextDueDate: "" });
   const [saving, setSaving] = useState(false);
 
   const registry = equipmentRegistry || [];
@@ -56,17 +41,10 @@ export default function OilChangeLog({ oilChanges, equipmentRegistry, onSave }) 
     Scheduled: oilChanges.filter((o) => o.status === "Scheduled").length,
   };
 
-  function openEdit(o) {
-    setEditing(o);
-    setForm({ changeDate: o.changeDate || "", nextDueDate: o.nextDueDate || "" });
-  }
-
-  async function handleSave() {
-    if (!editing) return;
-    const nextDueDate = form.nextDueDate || computeNextDue(form.changeDate, editing.frequency);
+  async function handleSave(updated) {
     setSaving(true);
     try {
-      await onSave({ ...editing, changeDate: form.changeDate, nextDueDate, status: computeStatus(nextDueDate) });
+      await onSave(updated);
       setEditing(null);
     } catch {
       // toast already shown
@@ -215,7 +193,7 @@ export default function OilChangeLog({ oilChanges, equipmentRegistry, onSave }) 
                       >
                         {o.status || "Current"}
                       </span>
-                      <button style={{ ...s.btn, padding: "3px 8px", fontSize: 11 }} onClick={() => openEdit(o)}>
+                      <button style={{ ...s.btn, padding: "3px 8px", fontSize: 11 }} onClick={() => setEditing(o)}>
                         <i className="ti ti-edit" aria-hidden="true" />
                       </button>
                     </div>
@@ -227,51 +205,7 @@ export default function OilChangeLog({ oilChanges, equipmentRegistry, onSave }) 
         })
       )}
 
-      {editing && (
-        <div
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(0,0,0,0.6)",
-            zIndex: 1000,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-          onClick={() => !saving && setEditing(null)}
-        >
-          <div
-            style={{ background: T.cardBg, border: `1px solid ${T.border}`, borderRadius: 12, padding: 24, width: 360 }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <p style={{ fontWeight: 700, marginBottom: 16 }}>
-              Update Oil Change — {editing.equipmentCode} / {editing.lubricationPoint}
-            </p>
-            <label style={s.label}>Last Change Date</label>
-            <input
-              style={{ ...s.input, marginBottom: 14 }}
-              type="date"
-              value={form.changeDate || ""}
-              onChange={(e) => setForm((x) => ({ ...x, changeDate: e.target.value }))}
-            />
-            <label style={s.label}>Next Due Date</label>
-            <input
-              style={{ ...s.input, marginBottom: 20 }}
-              type="date"
-              value={form.nextDueDate || ""}
-              onChange={(e) => setForm((x) => ({ ...x, nextDueDate: e.target.value }))}
-            />
-            <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
-              <button style={s.btn} onClick={() => setEditing(null)} disabled={saving}>
-                Cancel
-              </button>
-              <button style={s.btnPrimary} onClick={handleSave} disabled={saving}>
-                {saving ? "Saving…" : "Save"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {editing && <EditOilChangeModal oilChange={editing} saving={saving} onClose={() => setEditing(null)} onSave={handleSave} />}
     </div>
   );
 }
