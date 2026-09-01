@@ -20,17 +20,32 @@ function toISODate(value) {
 }
 
 // Picks the most recently changed Oil Change Log row for an equipment (it
-// can have several lubrication points) — used to prefill Last Change Date.
+// can have several lubrication points) — used to prefill Last Change Date
+// and to default which lubrication point a Last Change edit applies to.
 function latestOilChangeFor(oilChanges, equipmentCode) {
   const rows = (oilChanges || []).filter((o) => o.equipmentCode === equipmentCode && o.changeDate);
   if (rows.length === 0) return null;
   return rows.reduce((a, b) => (new Date(a.changeDate) > new Date(b.changeDate) ? a : b));
 }
 
+// Most recent PRIOR action for an equipment (excluding the action being
+// edited itself) — its Agreed Action becomes this action's starting
+// "Prev. Month Agreed Action", so a reviewer can see whether last time's
+// agreed action was actually followed up on.
+function lastAgreedActionFor(allActions, equipmentCode, excludeId) {
+  const rows = (allActions || []).filter((a) => a.equipmentCode === equipmentCode && a._id !== excludeId && a.agreedAction);
+  if (rows.length === 0) return "";
+  const latest = rows.reduce((a, b) =>
+    new Date(a.revisionDate || a.sampleDate || 0) > new Date(b.revisionDate || b.sampleDate || 0) ? a : b
+  );
+  return latest.agreedAction || "";
+}
+
 // Equipment Registry -> action-field autofill: Description, Oil Type
 // (Lubricant Grade), and Contractor come straight from the registry row;
-// Last Change Date is inherited from that equipment's Oil Change Log entry.
-function autofillFromEquipment(code, equipmentRegistry, oilChanges) {
+// Last Change Date is inherited from that equipment's Oil Change Log entry;
+// Prev. Month Agreed Action is inherited from this equipment's last action.
+function autofillFromEquipment(code, { equipmentRegistry, oilChanges, allActions, excludeId }) {
   const reg = (equipmentRegistry || []).find((r) => r.code === code);
   const latest = latestOilChangeFor(oilChanges, code);
   return {
@@ -39,34 +54,66 @@ function autofillFromEquipment(code, equipmentRegistry, oilChanges) {
     oilType: reg?.lubricant || "",
     contractor: reg?.contractor || "",
     lastChange: latest ? toISODate(latest.changeDate) : "",
+    prevMonthAgreedAction: lastAgreedActionFor(allActions, code, excludeId),
   };
 }
 
-export default function EditActionModal({ action, isNew, allActions, oilChanges, equipmentRegistry, onClose, onSave, onDelete, saving }) {
+export default function EditActionModal({
+  action,
+  isNew,
+  allActions,
+  samples,
+  oilChanges,
+  equipmentRegistry,
+  onClose,
+  onSave,
+  onDelete,
+  saving,
+}) {
   const { T, s } = useTheme();
+  const deps = { equipmentRegistry, oilChanges, allActions, excludeId: action._id };
   // New actions opened with an equipment code already known (e.g. from
   // inside an Oil Analysis Report) get their dependent fields autofilled
   // immediately; editing an existing action leaves its saved values alone
-  // until the user actively re-selects equipment.
+  // until the user actively re-selects equipment. Action Tracker's own "Add
+  // Action" always starts with an empty equipment code, so neither applies.
   const [form, setForm] = useState(() => {
     const base = { ...action };
     if (isNew && (base.equipmentCode || base.unitId)) {
-      const filled = autofillFromEquipment(base.equipmentCode || base.unitId, equipmentRegistry, oilChanges);
+      const filled = autofillFromEquipment(base.equipmentCode || base.unitId, deps);
       return { ...base, ...filled };
     }
     return base;
   });
-  const [lubPointId, setLubPointId] = useState(null);
+  const [lubPointId, setLubPointId] = useState(() => {
+    if (isNew && (action.equipmentCode || action.unitId)) {
+      const latest = latestOilChangeFor(oilChanges, action.equipmentCode || action.unitId);
+      return latest ? latest._id : null;
+    }
+    return null;
+  });
 
   function set(field, value) {
     setForm((f) => ({ ...f, [field]: value }));
   }
   function selectEquipment(code) {
-    setForm((f) => ({ ...f, ...autofillFromEquipment(code, equipmentRegistry, oilChanges) }));
+    setForm((f) => ({ ...f, ...autofillFromEquipment(code, deps) }));
+    const latest = latestOilChangeFor(oilChanges, code);
+    setLubPointId(latest ? latest._id : null);
   }
 
   const equipCode = form.equipmentCode || form.unitId || "";
   const oilChangesForEquip = (oilChanges || []).filter((o) => o.equipmentCode === equipCode);
+  const samplesForEquip = (samples || [])
+    .filter((sm) => sm.unitId === equipCode)
+    .sort((a, b) => new Date(b.sampledDate) - new Date(a.sampledDate));
+
+  function selectSampleDate(dateStr) {
+    const sample = samplesForEquip.find((sm) => sm.sampledDate === dateStr);
+    setForm((f) => ({ ...f, sampleDate: dateStr, sampleResult: sample ? (sample.reportStatus || "").toUpperCase() : f.sampleResult }));
+  }
+
+  const isClosed = (form.status || "Open") === "Closed";
 
   function handleSave() {
     const acNo = isNew ? nextAcNo(allActions || []) : form.acNo;
@@ -74,6 +121,7 @@ export default function EditActionModal({ action, isNew, allActions, oilChanges,
       ...form,
       acNo,
       equipmentCode: equipCode,
+      closingComment: isClosed ? form.closingComment || "" : "",
       _matchCols: isNew ? undefined : form._matchCols || [0, 1],
       _matchValues: isNew ? undefined : form._matchValues || [form.acNo, equipCode],
     };
@@ -111,8 +159,6 @@ export default function EditActionModal({ action, isNew, allActions, oilChanges,
       />
     </div>
   );
-
-  const isClosed = (form.status || "Open") === "Closed";
 
   return (
     <div
@@ -179,7 +225,24 @@ export default function EditActionModal({ action, isNew, allActions, oilChanges,
           {field("Description", "description")}
           {field("Oil Type", "oilType")}
           {field("Revision Date", "revisionDate", "date")}
-          {field("Sample Date", "sampleDate", "date")}
+          <div>
+            <label style={{ ...s.label, fontSize: 11 }}>Sample Date</label>
+            <select
+              style={{ ...s.input, fontSize: 13, cursor: "pointer" }}
+              value={form.sampleDate || ""}
+              onChange={(e) => selectSampleDate(e.target.value)}
+            >
+              <option value="">Select sample date…</option>
+              {samplesForEquip.map((sm) => (
+                <option key={sm._id} value={sm.sampledDate}>
+                  {sm.sampledDate}
+                </option>
+              ))}
+              {form.sampleDate && !samplesForEquip.some((sm) => sm.sampledDate === form.sampleDate) && (
+                <option value={form.sampleDate}>{form.sampleDate}</option>
+              )}
+            </select>
+          </div>
           {field("Sample Result", "sampleResult")}
         </div>
 
@@ -278,6 +341,7 @@ export default function EditActionModal({ action, isNew, allActions, oilChanges,
           {textarea("Prev. Month Agreed Action", "prevMonthAgreedAction")}
           {textarea("ACC Action", "accAction")}
           {textarea("Agreed Action", "agreedAction")}
+          {isClosed && <div style={{ gridColumn: "1 / -1" }}>{textarea("Closing Comment", "closingComment")}</div>}
         </div>
 
         <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>

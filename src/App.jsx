@@ -445,9 +445,9 @@ function AppShell({ config, setConfig }) {
           {page === "actions" && (
             <ActionTracker
               actions={actions}
+              samples={samples}
               oilChanges={oilChanges}
               equipmentRegistry={equipmentRegistry}
-              equipmentOptions={equipmentOptions}
               onAddAction={onAddAction}
               onUpdateAction={onUpdateAction}
               onDeleteAction={onDeleteAction}

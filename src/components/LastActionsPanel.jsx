@@ -10,6 +10,7 @@ import EditActionModal from "./EditActionModal";
 export default function LastActionsPanel({
   equipmentCode,
   actions,
+  samples,
   oilChanges,
   onAdd,
   onUpdate,
@@ -235,6 +236,7 @@ export default function LastActionsPanel({
           action={editing.action}
           isNew={editing.isNew}
           allActions={actions}
+          samples={samples}
           oilChanges={oilChanges}
           equipmentRegistry={equipmentRegistry}
           saving={saving}

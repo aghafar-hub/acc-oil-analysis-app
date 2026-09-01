@@ -44,13 +44,21 @@ async function postBlind(webhookUrl, body) {
   }
 }
 
-function rowsEqual(a, b) {
+function rowsEqual(a, b, skipIndices) {
+  const skip = new Set(skipIndices || []);
   const len = Math.max(a.length, b.length);
   for (let i = 0; i < len; i++) {
+    if (skip.has(i)) continue;
     if (String(a[i] ?? "").trim() !== String(b[i] ?? "").trim()) return false;
   }
   return true;
 }
+
+// Action Tracker's "Last Modified" column (index 16) is stamped by the
+// backend itself on every write, independent of whatever we send — so a
+// verification read will always show a fresh value there and must not be
+// compared, or every save would spuriously fail verification.
+const ACTION_LAST_MODIFIED_COL = 16;
 
 // ── Reads ─────────────────────────────────────────────────────────────────
 
@@ -103,7 +111,7 @@ export async function saveAction(webhookUrl, action, { isNew }) {
 
   const verify = await getEquipmentRows(webhookUrl, action.equipmentCode || action.unitId || "");
   const savedRow = (verify.actions || []).find((r) => String(r[0]).trim() === String(row[0]).trim());
-  if (!savedRow || !rowsEqual(savedRow, row)) {
+  if (!savedRow || !rowsEqual(savedRow, row, [ACTION_LAST_MODIFIED_COL])) {
     throw new SaveVerificationError(
       `The action wasn't confirmed saved to the sheet. It may not have written — please check the Action Tracker tab and try again.`
     );

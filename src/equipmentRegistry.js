@@ -2,11 +2,13 @@ import { DEFAULT_EQUIPMENT_REGISTRY } from "./equipmentRegistryDefault";
 
 // Matches the original app's own architecture: the equipment registry is
 // NOT part of the regular sample/action/oil-change sync. It's a hardcoded
-// default list (baked into the original bundle, extracted verbatim here)
-// that a user can override by explicitly running "Sync Equipment Registry"
-// in Settings → Configuration, which persists the result under this same
-// localStorage key so it survives across sessions independent of the
-// sample/action cache.
+// default list — pulled from the live "Equipment Registry" sheet tab
+// (152 rows, all 10 columns including Area and Contractor) rather than the
+// original bundle's own stale snapshot, which predated the Contractor
+// column and had no Area data at all — that a user can override by
+// explicitly running "Sync Equipment Registry" in Settings → Configuration,
+// which persists the result under this same localStorage key so it
+// survives across sessions independent of the sample/action cache.
 const KEY = "oilapp_equipment_registry";
 
 export function loadEquipmentRegistry() {
