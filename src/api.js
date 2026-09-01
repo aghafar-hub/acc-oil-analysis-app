@@ -54,11 +54,12 @@ function rowsEqual(a, b, skipIndices) {
   return true;
 }
 
-// Action Tracker's "Last Modified" column (index 16) is stamped by the
-// backend itself on every write, independent of whatever we send — so a
-// verification read will always show a fresh value there and must not be
-// compared, or every save would spuriously fail verification.
-const ACTION_LAST_MODIFIED_COL = 16;
+// Action Tracker's "Last Modified" column (index 17 — after Closing
+// Comment) is stamped by the backend itself on every write, independent of
+// whatever we send — so a verification read will always show a fresh value
+// there and must not be compared, or every save would spuriously fail
+// verification.
+const ACTION_LAST_MODIFIED_COL = 17;
 
 // ── Reads ─────────────────────────────────────────────────────────────────
 

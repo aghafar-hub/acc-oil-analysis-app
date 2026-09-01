@@ -112,9 +112,10 @@ export function sampleTrackerStatus(lastDateStr, intervalText) {
 // 4 Revision Date, 5 Sample Date, 6 Sample Result, 7 Sample Analysis,
 // 8 Last Change, 9 Status, 10 Contractor Action, 11 Contractor,
 // 12 Completed Date, 13 Prev Month Agreed Action, 14 Acc Action,
-// 15 Agreed Action, 16 Last Modified, 17 Closing Comment.
-// Last Modified is stamped by the backend itself on every write regardless
-// of what's sent (confirmed against the live sheet), so it's only ever
+// 15 Agreed Action, 16 Closing Comment, 17 Last Modified.
+// Confirmed against the live sheet's own header row — Closing Comment sits
+// BEFORE Last Modified, not after. Last Modified is stamped by the backend
+// itself on every write regardless of what's sent, so it's only ever
 // round-tripped here, never set by the client.
 
 export const ACTION_HEADERS = [
@@ -134,8 +135,8 @@ export const ACTION_HEADERS = [
   "Prev Month Agreed Action",
   "Acc Action",
   "Agreed Action",
+  "Closing Comment",
   "Last Modified",
-  "Closing comment",
 ];
 
 export function rowToAction(row) {
@@ -156,8 +157,8 @@ export function rowToAction(row) {
     prevMonthAgreedAction,
     accAction,
     agreedAction,
-    lastModified,
     closingComment,
+    lastModified,
   ] = row;
   return {
     acNo,
@@ -177,8 +178,8 @@ export function rowToAction(row) {
     prevMonthAgreedAction,
     accAction,
     agreedAction,
-    lastModified,
     closingComment,
+    lastModified,
     _id: `${equipmentCode}_${acNo}_${revisionDate}`,
     _matchCols: [0, 1],
     _matchValues: [acNo, equipmentCode],
@@ -203,8 +204,8 @@ export function actionToRow(a) {
     a.prevMonthAgreedAction || "",
     a.accAction || "",
     a.agreedAction || "",
-    a.lastModified || "",
     a.closingComment || "",
+    a.lastModified || "",
   ];
 }
 
