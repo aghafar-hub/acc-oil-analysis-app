@@ -11,6 +11,7 @@ import OilReportSearch from "./pages/OilReportSearch";
 import ActionTracker from "./pages/ActionTracker";
 import AddSample from "./pages/AddSample";
 import OilChangeLog from "./pages/OilChangeLog";
+import Reports from "./pages/Reports";
 import SampleTracker from "./pages/SampleTracker";
 import HowToUse from "./pages/HowToUse";
 import Settings from "./pages/Settings";
@@ -480,6 +481,7 @@ function AppShell({ config, setConfig }) {
               onAddAction={onAddAction}
             />
           )}
+          {page === "reports" && <Reports actions={actions} oilChanges={oilChanges} equipmentRegistry={equipmentRegistry} />}
           {page === "tracker" && <SampleTracker trackerRaw={trackerRaw} oilChanges={oilChanges} equipmentRegistry={equipmentRegistry} />}
           {page === "howto" && <HowToUse />}
           {page === "settings" && (

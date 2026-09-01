@@ -10,6 +10,7 @@ const NAV = [
   { id: "upload", label: "Add Sample", icon: "ti-plus" },
   { id: "actions", label: "Action Tracker", icon: "ti-checklist" },
   { id: "oilchange", label: "Oil Change Log", icon: "ti-oil" },
+  { id: "reports", label: "Reports", icon: "ti-report" },
   { id: "tracker", label: "Sample Tracker", icon: "ti-timeline" },
   { id: "howto", label: "How to Use", icon: "ti-help-circle" },
   { id: "settings", label: "Settings", icon: "ti-settings" },

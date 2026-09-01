@@ -8,6 +8,7 @@ const PAGE_TITLES = {
   upload: "Add Sample",
   actions: "Action Tracker",
   oilchange: "Oil Change Log",
+  reports: "Reports",
   tracker: "Oil Sample Tracker",
   howto: "How to Use",
   settings: "Settings",
