@@ -1,17 +1,68 @@
 import { useState } from "react";
 import { useTheme } from "../ThemeContext";
 import { nextAcNo, formatDate } from "../parsers";
+import EquipmentSearch from "./EquipmentSearch";
 
 const STATUS_OPTIONS = ["Open", "In Progress", "Closed", "Waiting Stoppage"];
 const CONTRACTOR_OPTIONS = ["RHI", "ASEC"];
 
-export default function EditActionModal({ action, isNew, allActions, oilChanges, equipmentOptions, onClose, onSave, onDelete, saving }) {
+// "26 Mar 2026"-style (or any parseable) date -> "2026-03-26" for
+// <input type="date">, using local date parts so it can't shift by a day
+// against a UTC conversion.
+function toISODate(value) {
+  if (!value) return "";
+  const d = new Date(value);
+  if (isNaN(d)) return "";
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+// Picks the most recently changed Oil Change Log row for an equipment (it
+// can have several lubrication points) — used to prefill Last Change Date.
+function latestOilChangeFor(oilChanges, equipmentCode) {
+  const rows = (oilChanges || []).filter((o) => o.equipmentCode === equipmentCode && o.changeDate);
+  if (rows.length === 0) return null;
+  return rows.reduce((a, b) => (new Date(a.changeDate) > new Date(b.changeDate) ? a : b));
+}
+
+// Equipment Registry -> action-field autofill: Description, Oil Type
+// (Lubricant Grade), and Contractor come straight from the registry row;
+// Last Change Date is inherited from that equipment's Oil Change Log entry.
+function autofillFromEquipment(code, equipmentRegistry, oilChanges) {
+  const reg = (equipmentRegistry || []).find((r) => r.code === code);
+  const latest = latestOilChangeFor(oilChanges, code);
+  return {
+    equipmentCode: code,
+    description: reg?.description || "",
+    oilType: reg?.lubricant || "",
+    contractor: reg?.contractor || "",
+    lastChange: latest ? toISODate(latest.changeDate) : "",
+  };
+}
+
+export default function EditActionModal({ action, isNew, allActions, oilChanges, equipmentRegistry, onClose, onSave, onDelete, saving }) {
   const { T, s } = useTheme();
-  const [form, setForm] = useState(() => ({ ...action }));
+  // New actions opened with an equipment code already known (e.g. from
+  // inside an Oil Analysis Report) get their dependent fields autofilled
+  // immediately; editing an existing action leaves its saved values alone
+  // until the user actively re-selects equipment.
+  const [form, setForm] = useState(() => {
+    const base = { ...action };
+    if (isNew && (base.equipmentCode || base.unitId)) {
+      const filled = autofillFromEquipment(base.equipmentCode || base.unitId, equipmentRegistry, oilChanges);
+      return { ...base, ...filled };
+    }
+    return base;
+  });
   const [lubPointId, setLubPointId] = useState(null);
 
   function set(field, value) {
     setForm((f) => ({ ...f, [field]: value }));
+  }
+  function selectEquipment(code) {
+    setForm((f) => ({ ...f, ...autofillFromEquipment(code, equipmentRegistry, oilChanges) }));
   }
 
   const equipCode = form.equipmentCode || form.unitId || "";
@@ -117,18 +168,13 @@ export default function EditActionModal({ action, isNew, allActions, oilChanges,
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(160px,1fr))", gap: 12, marginBottom: 18 }}>
           <div>
             <label style={{ ...s.label, fontSize: 11 }}>Equipment Code</label>
-            <select
-              style={{ ...s.input, fontSize: 13, cursor: "pointer" }}
+            <EquipmentSearch
+              options={equipmentRegistry}
               value={equipCode}
-              onChange={(e) => set("equipmentCode", e.target.value)}
-            >
-              <option value="">Select equipment…</option>
-              {(equipmentOptions || []).map((code) => (
-                <option key={code} value={code}>
-                  {code}
-                </option>
-              ))}
-            </select>
+              onChange={selectEquipment}
+              placeholder="Search equipment…"
+              width="100%"
+            />
           </div>
           {field("Description", "description")}
           {field("Oil Type", "oilType")}

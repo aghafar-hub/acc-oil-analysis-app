@@ -16,7 +16,7 @@ export default function LastActionsPanel({
   onDelete,
   title,
   limit,
-  equipmentOptions,
+  equipmentRegistry,
 }) {
   const { T, s } = useTheme();
   const STATUS_COLOR = { Open: T.danger, "In Progress": T.warning, Closed: T.success, "Waiting Stoppage": T.accent };
@@ -236,7 +236,7 @@ export default function LastActionsPanel({
           isNew={editing.isNew}
           allActions={actions}
           oilChanges={oilChanges}
-          equipmentOptions={equipmentOptions}
+          equipmentRegistry={equipmentRegistry}
           saving={saving}
           onClose={() => !saving && setEditing(null)}
           onSave={handleSave}

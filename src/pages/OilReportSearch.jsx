@@ -588,10 +588,12 @@ export default function OilReportSearch({ samples, oilChanges, actions, equipmen
           <LastActionsPanel
             equipmentCode={equipCode}
             actions={actions}
+            oilChanges={oilChanges}
             onAdd={onAddAction}
             onUpdate={onUpdateAction}
             title="Last 5 Actions"
             limit={5}
+            equipmentRegistry={registry}
           />
         </div>
       )}

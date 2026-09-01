@@ -270,7 +270,7 @@ export default function ActionTracker({
           isNew={editing.isNew}
           allActions={actions}
           oilChanges={oilChanges}
-          equipmentOptions={equipmentOptions}
+          equipmentRegistry={registry}
           saving={saving}
           onClose={() => !saving && setEditing(null)}
           onSave={handleSave}

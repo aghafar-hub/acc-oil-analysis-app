@@ -414,6 +414,7 @@ function AppShell({ config, setConfig }) {
               actions={actions}
               oilChanges={oilChanges}
               equipmentOptions={equipmentOptions}
+              equipmentRegistry={equipmentRegistry}
               onAddAction={onAddAction}
               onUpdateAction={onUpdateAction}
               onDeleteAction={onDeleteAction}
