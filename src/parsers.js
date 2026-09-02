@@ -204,10 +204,13 @@ export function sampleTriggerReadings(sm) {
   );
 }
 
-// Equipment flips from OVERDUE (amber) to MISSING (red) once it's this many
-// months past its interval, rather than by a day count — the sheet only
-// tracks samples to month granularity now, so freshness is judged the same
-// way.
+// Equipment stays OK for this many months past its interval before flipping
+// to OVERDUE (amber) — mirrors the old app's ~15-day grace so crossing the
+// interval by a few days doesn't immediately read as an alarm. It then
+// stays OVERDUE for OVERDUE_GRACE_MONTHS more before flipping to MISSING
+// (red). Both are month counts, not days — the sheet only tracks samples to
+// month granularity now, so freshness is judged the same way.
+const OK_GRACE_MONTHS = 0.5;
 const OVERDUE_GRACE_MONTHS = 1.5;
 
 function formatMonths(months) {
@@ -225,9 +228,10 @@ export function sampleTrackerStatus(lastDateStr, intervalText) {
   const last = new Date(lastDateStr);
   if (isNaN(last)) return { label: "MISSING", daysInfo: "Invalid date" };
   const ageMonths = (Date.now() - last.getTime()) / 86400000 / 30.44;
-  const remaining = months - ageMonths;
-  if (ageMonths <= months) return { label: "OK", daysInfo: `${formatMonths(remaining)} remaining` };
-  if (ageMonths <= months + OVERDUE_GRACE_MONTHS) return { label: "OVERDUE", daysInfo: `${formatMonths(ageMonths - months)} overdue` };
+  if (ageMonths <= months) return { label: "OK", daysInfo: `${formatMonths(months - ageMonths)} remaining` };
+  if (ageMonths <= months + OK_GRACE_MONTHS) return { label: "OK", daysInfo: "Due now" };
+  if (ageMonths <= months + OK_GRACE_MONTHS + OVERDUE_GRACE_MONTHS)
+    return { label: "OVERDUE", daysInfo: `${formatMonths(ageMonths - months)} overdue` };
   return { label: "MISSING", daysInfo: `${formatMonths(ageMonths - months)} missing` };
 }
 
