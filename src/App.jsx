@@ -481,7 +481,9 @@ function AppShell({ config, setConfig }) {
               onAddAction={onAddAction}
             />
           )}
-          {page === "reports" && <Reports actions={actions} oilChanges={oilChanges} equipmentRegistry={equipmentRegistry} />}
+          {page === "reports" && (
+            <Reports actions={actions} oilChanges={oilChanges} equipmentRegistry={equipmentRegistry} trackerRaw={trackerRaw} />
+          )}
           {page === "tracker" && <SampleTracker trackerRaw={trackerRaw} oilChanges={oilChanges} equipmentRegistry={equipmentRegistry} />}
           {page === "howto" && <HowToUse />}
           {page === "settings" && (

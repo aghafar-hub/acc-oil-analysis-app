@@ -1,12 +1,14 @@
 import { jsPDF } from "jspdf";
 import { autoTable } from "jspdf-autotable";
-import { formatDate } from "./parsers";
+import { formatDate, parseTrackerRows, sampleTrackerStatus, intervalMonths } from "./parsers";
 import logoUrl from "./assets/arabian-cement-logo.png";
 
-// Two printable-to-PDF reports, generated entirely client-side from the
+// Four printable-to-PDF reports, generated entirely client-side from the
 // same live data the rest of the app already has in memory — no server
 // round trip, no template file to keep in sync. Each can be scoped to a
-// single contractor or run across all of them.
+// single contractor or run across all of them. The combined report reuses
+// the same three section-builders as the three standalone reports, so
+// there's exactly one place that computes each report's numbers.
 
 const BRAND = {
   navy: [11, 37, 69],
@@ -38,6 +40,26 @@ function daysSince(dateStr) {
   const d = new Date(dateStr);
   if (isNaN(d)) return null;
   return Math.round((Date.now() - d.getTime()) / 86400000);
+}
+
+// Same "how many days past the interval" math as sampleTrackerStatus's own
+// internal calculation — kept separate since that function only returns a
+// formatted string, and sorting worst-first needs the raw number.
+function sampleOverdueDays(lastDateStr, intervalText) {
+  const months = intervalMonths(intervalText);
+  if (!months || !lastDateStr) return null;
+  const last = new Date(lastDateStr);
+  if (isNaN(last)) return null;
+  const intervalDays = months * 30.44;
+  const ageDays = (Date.now() - last.getTime()) / 86400000;
+  return Math.round(ageDays - intervalDays);
+}
+
+function scopeLineFor(contractor) {
+  return contractor === "All" ? "All Contractors" : `Contractor: ${contractor}`;
+}
+function fileSuffixFor(contractor) {
+  return contractor === "All" ? "" : `-${contractor.replace(/[^a-z0-9]+/gi, "")}`;
 }
 
 // Vite serves the logo as a URL; jsPDF needs actual pixel data, so it's
@@ -133,6 +155,22 @@ function sectionTitle(doc, text, y) {
   return y + 20;
 }
 
+// Bold divider between reports inside the combined PDF — bigger and more
+// visually separated than a normal sectionTitle so it reads as "a new
+// report starts here", not just another subsection.
+function bigSectionHeader(doc, text, y) {
+  const pageWidth = doc.internal.pageSize.getWidth();
+  doc.setFillColor(...BRAND.headBg);
+  doc.rect(30, y - 15, pageWidth - 60, 26, "F");
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(12.5);
+  doc.setTextColor(...BRAND.navy);
+  doc.text(text.toUpperCase(), 36, y + 3);
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(20, 26, 33);
+  return y + 30;
+}
+
 // Wrapped narrative paragraph giving the report a lead-in sentence instead
 // of dropping straight into tables.
 function summaryParagraph(doc, text, y) {
@@ -174,41 +212,17 @@ function needsNewPage(doc, y, minSpace = 110) {
   return 40;
 }
 
-// Prepared/Reviewed/Approved sign-off lines — standard on a printed
-// maintenance report handed off between the plant and a contractor.
-function addSignOff(doc, y) {
-  y = needsNewPage(doc, y, 100);
-  y += 18;
-  const pageWidth = doc.internal.pageSize.getWidth();
-  const usable = pageWidth - 72;
-  const colW = usable / 3;
-  ["Prepared By", "Reviewed By", "Approved By"].forEach((label, i) => {
-    const x = 36 + i * colW;
-    doc.setDrawColor(...BRAND.muted);
-    doc.setLineWidth(0.6);
-    doc.line(x, y + 26, x + colW - 20, y + 26);
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(8.5);
-    doc.setTextColor(...BRAND.muted);
-    doc.text(label, x, y + 38);
-    doc.text("Date: ___________", x, y + 50);
-  });
-  doc.setTextColor(20, 26, 33);
-  return y + 60;
-}
-
 function contractorsFromRegistry(equipmentRegistry) {
   return Array.from(new Set((equipmentRegistry || []).map((r) => r.contractor).filter(Boolean)));
 }
 
-// ── Report 1: Contractor Action Status ──────────────────────────────────
+// ── Section 1: Contractor Action Status ─────────────────────────────────
 // Focused on the three unresolved statuses — Open, In Progress, Waiting
 // Stoppage — since Closed actions are history, not something a contractor
-// needs to act on. Scoped to one contractor, or run across all of them
-// (one summary table, then one detail table per contractor).
+// needs to act on.
 const FOCUS_STATUSES = ["Open", "In Progress", "Waiting Stoppage"];
 
-export async function generateContractorActionReport({ actions, equipmentRegistry, contractor = "All" }) {
+function buildActionSection(doc, { actions, equipmentRegistry, contractor = "All" }, y) {
   const registryByCode = {};
   (equipmentRegistry || []).forEach((r) => (registryByCode[r.code] = r));
   const contractorOf = (a) => a.contractor || registryByCode[a.equipmentCode]?.contractor || "Unassigned";
@@ -219,10 +233,6 @@ export async function generateContractorActionReport({ actions, equipmentRegistr
   const byContractor = {};
   unresolved.forEach((a) => (byContractor[contractorOf(a)] ||= []).push(a));
   const contractors = Object.keys(byContractor).sort((a, b) => byContractor[b].length - byContractor[a].length);
-
-  const scopeLine = contractor === "All" ? "All Contractors" : `Contractor: ${contractor}`;
-  const doc = await newDoc("Contractor Action Status Report", scopeLine);
-  let y = 98;
 
   const oldestOverall = unresolved.reduce((m, a) => Math.max(m, daysSince(a.revisionDate) ?? 0), 0);
   const narrative =
@@ -313,17 +323,21 @@ export async function generateContractorActionReport({ actions, equipmentRegistr
     y += 20;
   }
 
-  y = addSignOff(doc, y);
-  addFooter(doc);
-  const scopeSuffix = contractor === "All" ? "" : `-${contractor.replace(/[^a-z0-9]+/gi, "")}`;
-  doc.save(`Contractor-Action-Status-Report${scopeSuffix}-${toFileDate()}.pdf`);
+  return y;
 }
 
-// ── Report 2: Oil Change Log — Contractor Performance ───────────────────
-// Same on-time% / closure-rate% definitions as the Dashboard's Contractor
-// Performance card, plus a dedicated overdue-equipment table sorted most
-// overdue first. Scoped to one contractor, or run across all of them.
-export async function generateOilChangeContractorReport({ oilChanges, equipmentRegistry, actions, contractor = "All" }) {
+export async function generateContractorActionReport({ actions, equipmentRegistry, contractor = "All" }) {
+  const doc = await newDoc("Contractor Action Status Report", scopeLineFor(contractor));
+  buildActionSection(doc, { actions, equipmentRegistry, contractor }, 98);
+  addFooter(doc);
+  doc.save(`Contractor-Action-Status-Report${fileSuffixFor(contractor)}-${toFileDate()}.pdf`);
+}
+
+// ── Section 2: Oil Change Log — Contractor Performance ──────────────────
+// On-time% / closure-rate% definitions matching the Dashboard's own
+// Contractor Performance card, plus a dedicated overdue-equipment table
+// sorted most overdue first.
+function buildOilChangeSection(doc, { oilChanges, equipmentRegistry, actions, contractor = "All" }, y) {
   const registryByCode = {};
   (equipmentRegistry || []).forEach((r) => (registryByCode[r.code] = r));
   const allContractors = contractorsFromRegistry(equipmentRegistry);
@@ -348,10 +362,6 @@ export async function generateOilChangeContractorReport({ oilChanges, equipmentR
     .filter((o) => o.status === "Overdue")
     .filter((o) => !scopedCodes || scopedCodes.has(o.equipmentCode))
     .sort((a, b) => new Date(a.nextDueDate || 0) - new Date(b.nextDueDate || 0));
-
-  const scopeLine = contractor === "All" ? "All Contractors" : `Contractor: ${contractor}`;
-  const doc = await newDoc("Oil Change Log — Contractor Performance Report", scopeLine);
-  let y = 98;
 
   const narrative =
     contractor === "All"
@@ -439,8 +449,118 @@ export async function generateOilChangeContractorReport({ oilChanges, equipmentR
   });
   y = doc.lastAutoTable.finalY + 24;
 
-  y = addSignOff(doc, y);
+  return y;
+}
+
+export async function generateOilChangeContractorReport({ oilChanges, equipmentRegistry, actions, contractor = "All" }) {
+  const doc = await newDoc("Oil Change Log — Contractor Performance Report", scopeLineFor(contractor));
+  buildOilChangeSection(doc, { oilChanges, equipmentRegistry, actions, contractor }, 98);
   addFooter(doc);
-  const scopeSuffix = contractor === "All" ? "" : `-${contractor.replace(/[^a-z0-9]+/gi, "")}`;
-  doc.save(`Oil-Change-Contractor-Performance-Report${scopeSuffix}-${toFileDate()}.pdf`);
+  doc.save(`Oil-Change-Contractor-Performance-Report${fileSuffixFor(contractor)}-${toFileDate()}.pdf`);
+}
+
+// ── Section 3: Oil Sample Missing / Overdue ─────────────────────────────
+// Same OK/OVERDUE/MISSING classification as the Sample Tracker page
+// (sampleTrackerStatus, against each equipment's own sampling interval),
+// listing only what's flagged — MISSING first, then OVERDUE, worst first.
+function buildSampleSection(doc, { trackerRaw, equipmentRegistry, contractor = "All" }, y) {
+  const trackerByEquip = parseTrackerRows(trackerRaw);
+  let registry = equipmentRegistry || [];
+  if (contractor !== "All") registry = registry.filter((r) => r.contractor === contractor);
+
+  const rows = registry.map((eq) => {
+    const history = trackerByEquip[eq.code] || [];
+    const lastDate = history[0]?.date || "";
+    const status = sampleTrackerStatus(lastDate, eq.interval);
+    return { eq, lastDate, status, sortDays: sampleOverdueDays(lastDate, eq.interval) ?? -999999 };
+  });
+
+  const counts = {
+    OK: rows.filter((r) => r.status.label === "OK").length,
+    OVERDUE: rows.filter((r) => r.status.label === "OVERDUE").length,
+    MISSING: rows.filter((r) => r.status.label === "MISSING").length,
+  };
+
+  const flagged = rows
+    .filter((r) => r.status.label !== "OK")
+    .sort((a, b) => {
+      if (a.status.label !== b.status.label) return a.status.label === "MISSING" ? -1 : 1;
+      return b.sortDays - a.sortDays;
+    });
+
+  const narrative =
+    contractor === "All"
+      ? `This report lists every piece of equipment whose oil sample is overdue or missing against its own sampling interval, across all contractors.`
+      : `This report lists every piece of equipment assigned to ${contractor} whose oil sample is overdue or missing against its own sampling interval.`;
+  y = summaryParagraph(doc, narrative, y);
+
+  y = statStrip(
+    doc,
+    [
+      { value: registry.length, label: "TOTAL EQUIPMENT", color: BRAND.navy },
+      { value: counts.MISSING, label: "MISSING", color: BRAND.danger },
+      { value: counts.OVERDUE, label: "OVERDUE", color: BRAND.warning },
+      { value: counts.OK, label: "OK", color: BRAND.success },
+    ],
+    y
+  );
+  y += 12;
+
+  y = needsNewPage(doc, y, 130);
+  y = sectionTitle(doc, `Overdue / Missing Samples — ${flagged.length}`, y);
+  const bodyRows = flagged.map(({ eq, lastDate, status }) => [
+    eq.code,
+    eq.description || "—",
+    eq.area || "—",
+    eq.contractor || "—",
+    eq.interval || "—",
+    lastDate ? formatDate(lastDate) : "Never sampled",
+    status.label,
+    status.daysInfo || "—",
+  ]);
+  autoTable(doc, {
+    startY: y,
+    head: [["Equipment", "Description", "Area", "Contractor", "Interval", "Last Sample", "Status", "Details"]],
+    body: bodyRows.length ? bodyRows : [["No overdue or missing samples right now", "", "", "", "", "", "", ""]],
+    theme: "striped",
+    headStyles: { fillColor: BRAND.headBg, textColor: BRAND.navy, fontSize: 8 },
+    styles: { fontSize: 8, cellPadding: 4, lineColor: BRAND.border, lineWidth: 0.4 },
+    margin: { left: 36, right: 36 },
+    didParseCell: (data) => {
+      if (data.section === "body" && data.column.index === 6) {
+        data.cell.styles.textColor = data.cell.raw === "MISSING" ? BRAND.danger : BRAND.warning;
+        data.cell.styles.fontStyle = "bold";
+      }
+    },
+  });
+  y = doc.lastAutoTable.finalY + 24;
+
+  return y;
+}
+
+export async function generateSampleOverdueReport({ trackerRaw, equipmentRegistry, contractor = "All" }) {
+  const doc = await newDoc("Oil Sample Missing / Overdue Report", scopeLineFor(contractor));
+  buildSampleSection(doc, { trackerRaw, equipmentRegistry, contractor }, 98);
+  addFooter(doc);
+  doc.save(`Oil-Sample-Missing-Overdue-Report${fileSuffixFor(contractor)}-${toFileDate()}.pdf`);
+}
+
+// ── Combined report: all three sections in one PDF ──────────────────────
+export async function generateCombinedReport({ actions, oilChanges, equipmentRegistry, trackerRaw, contractor = "All" }) {
+  const doc = await newDoc("Combined Maintenance Report", scopeLineFor(contractor));
+  let y = 98;
+
+  y = bigSectionHeader(doc, "1. Contractor Action Status", y);
+  y = buildActionSection(doc, { actions, equipmentRegistry, contractor }, y);
+
+  doc.addPage();
+  y = bigSectionHeader(doc, "2. Oil Change Log — Contractor Performance", 50);
+  y = buildOilChangeSection(doc, { oilChanges, equipmentRegistry, actions, contractor }, y);
+
+  doc.addPage();
+  y = bigSectionHeader(doc, "3. Oil Sample Missing / Overdue", 50);
+  buildSampleSection(doc, { trackerRaw, equipmentRegistry, contractor }, y);
+
+  addFooter(doc);
+  doc.save(`Combined-Maintenance-Report${fileSuffixFor(contractor)}-${toFileDate()}.pdf`);
 }
