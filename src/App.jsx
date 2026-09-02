@@ -127,6 +127,28 @@ function AppShell({ config, setConfig }) {
     [config.webhookUrl, pushToast]
   );
 
+  // Keeps the Oil Sample Tracker sheet in sync with new samples automatically
+  // — same best-effort side-effect pattern as applyOilChangeSideEffect: the
+  // sample save itself already succeeded, so a failure here is surfaced as
+  // its own toast rather than treated as the primary save failing. Re-syncs
+  // afterward so the Sample Tracker page reflects the new entry right away
+  // instead of only after the next manual sync.
+  const applySampleTrackerSideEffect = useCallback(
+    async (sample) => {
+      try {
+        await api.updateSampleTracker(config.webhookUrl, {
+          equipmentCode: sample.unitId,
+          sampleDate: sample.sampledDate,
+          status: sample.reportStatus,
+        });
+        await runSync();
+      } catch (err) {
+        pushToast(`Sample saved, but the Sample Tracker wasn't updated: ${err.message}`, "error");
+      }
+    },
+    [config.webhookUrl, pushToast, runSync]
+  );
+
   const onAddAction = useCallback(
     async (action) => {
       try {
@@ -213,13 +235,14 @@ function AppShell({ config, setConfig }) {
           return next;
         });
         pushToast("Sample saved.", "success");
+        await applySampleTrackerSideEffect(saved);
         return saved;
       } catch (err) {
         pushToast(err.message, "error");
         throw err;
       }
     },
-    [config.webhookUrl, pushToast]
+    [config.webhookUrl, pushToast, applySampleTrackerSideEffect]
   );
 
   const onEditSample = useCallback(
@@ -493,6 +516,7 @@ function AppShell({ config, setConfig }) {
               onSync={runSync}
               syncState={syncState}
               syncMsg={syncMsg}
+              equipmentRegistry={equipmentRegistry}
               onRegistryChange={setEquipmentRegistry}
               actionRegistry={actionRegistry}
               onActionRegistryChange={setActionRegistry}

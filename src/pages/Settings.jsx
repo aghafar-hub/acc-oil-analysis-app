@@ -110,6 +110,131 @@ function Toggle({ T, s, label, desc, checked, onChange }) {
   );
 }
 
+// Inline-editable list of every equipment's sampling interval, saved
+// straight to the "Equipment Registry" sheet (column F) via a full-row
+// updateRow — the same generic write every other sheet in this app uses.
+// A search box keeps this usable against the live ~150-row registry.
+function IntervalRegistryEditor({ T, s, webhookUrl, equipmentRegistry, onRegistryChange }) {
+  const [query, setQuery] = useState("");
+  const [editingCode, setEditingCode] = useState(null);
+  const [draftInterval, setDraftInterval] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState("");
+
+  const registry = equipmentRegistry || [];
+  const q = query.trim().toLowerCase();
+  const filtered = !q
+    ? registry
+    : registry.filter((r) => r.code.toLowerCase().includes(q) || (r.description || "").toLowerCase().includes(q));
+  const shown = filtered.slice(0, 50);
+
+  function startEdit(eq) {
+    setEditingCode(eq.code);
+    setDraftInterval(eq.interval || "");
+    setMsg("");
+  }
+  function cancelEdit() {
+    setEditingCode(null);
+    setDraftInterval("");
+  }
+  async function saveEdit(eq) {
+    if (!webhookUrl) {
+      setMsg("❌ Configure Webhook URL first");
+      return;
+    }
+    setSaving(true);
+    setMsg("");
+    try {
+      const updated = await api.updateEquipmentRegistryEntry(webhookUrl, { ...eq, interval: draftInterval.trim() });
+      const next = registry.map((r) => (r.code === eq.code ? { ...r, ...updated } : r));
+      saveEquipmentRegistry(next);
+      onRegistryChange?.(next);
+      setEditingCode(null);
+      setMsg(`✓ ${eq.code} interval updated`);
+    } catch (err) {
+      setMsg(`❌ ${err.message}`);
+    } finally {
+      setSaving(false);
+      setTimeout(() => setMsg(""), 6000);
+    }
+  }
+
+  return (
+    <div style={{ ...s.card, marginBottom: 20 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+        <i className="ti ti-clock-hour-4" style={{ color: T.accent, fontSize: 18 }} aria-hidden="true" />
+        <div>
+          <p style={{ margin: 0, fontWeight: 700, color: T.textPrimary, fontSize: 14 }}>Sampling Intervals</p>
+          <p style={{ margin: 0, fontSize: 11, color: T.textSecondary }}>
+            Edit how often each piece of equipment should be sampled — saved straight to the "Equipment Registry" sheet.
+          </p>
+        </div>
+      </div>
+      <input
+        style={{ ...s.input, fontSize: 13, marginBottom: 10, maxWidth: 320 }}
+        placeholder="Search equipment code or description…"
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+      />
+      <div style={{ maxHeight: 340, overflowY: "auto", border: `1px solid ${T.border}`, borderRadius: 8 }}>
+        {shown.length === 0 ? (
+          <div style={{ padding: 16, textAlign: "center", color: T.textMuted, fontSize: 12 }}>No equipment match.</div>
+        ) : (
+          shown.map((eq) => (
+            <div
+              key={eq.code}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 10,
+                padding: "8px 12px",
+                borderBottom: `1px solid ${T.border2}`,
+              }}
+            >
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontFamily: "monospace", fontWeight: 700, fontSize: 12, color: T.accent }}>{eq.code}</div>
+                <div style={{ fontSize: 11, color: T.textSecondary, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {eq.description}
+                </div>
+              </div>
+              {editingCode === eq.code ? (
+                <>
+                  <input
+                    style={{ ...s.input, fontSize: 12, width: 140 }}
+                    value={draftInterval}
+                    onChange={(e) => setDraftInterval(e.target.value)}
+                    placeholder="e.g. 6 Months"
+                    autoFocus
+                    onKeyDown={(e) => e.key === "Enter" && saveEdit(eq)}
+                    disabled={saving}
+                  />
+                  <button style={{ ...s.btn, padding: "4px 8px", fontSize: 11 }} onClick={() => saveEdit(eq)} disabled={saving}>
+                    <i className={`ti ${saving ? "ti-loader" : "ti-check"}`} aria-hidden="true" />
+                  </button>
+                  <button style={{ ...s.btn, padding: "4px 8px", fontSize: 11 }} onClick={cancelEdit} disabled={saving}>
+                    <i className="ti ti-x" aria-hidden="true" />
+                  </button>
+                </>
+              ) : (
+                <>
+                  <span style={{ fontSize: 12, color: T.textHighlight, width: 100, textAlign: "right" }}>{eq.interval || "—"}</span>
+                  <button style={{ ...s.btn, padding: "4px 8px", fontSize: 11 }} onClick={() => startEdit(eq)}>
+                    <i className="ti ti-pencil" aria-hidden="true" />
+                  </button>
+                </>
+              )}
+            </div>
+          ))
+        )}
+      </div>
+      {filtered.length > 50 && (
+        <p style={{ fontSize: 11, color: T.textMuted, marginTop: 6 }}>Showing 50 of {filtered.length} — narrow your search to see more.</p>
+      )}
+      {msg && <p style={{ marginTop: 8, fontSize: 12, color: msg.startsWith("✓") ? T.success : T.danger }}>{msg}</p>}
+    </div>
+  );
+}
+
 function Field({ T, s, label, value, placeholder, onChange, desc, type = "text" }) {
   return (
     <div style={{ marginBottom: 18 }}>
@@ -130,7 +255,17 @@ function Field({ T, s, label, value, placeholder, onChange, desc, type = "text" 
 // password) and Configuration (password 17593, re-required every time the
 // tab is opened) — including the Equipment Registry Sync reconciliation
 // flow, App Status summary, and export/import/reset/clear-cache actions.
-export default function Settings({ config, onSave, onSync, syncState, syncMsg, onRegistryChange, onActionRegistryChange, actionRegistry }) {
+export default function Settings({
+  config,
+  onSave,
+  onSync,
+  syncState,
+  syncMsg,
+  equipmentRegistry,
+  onRegistryChange,
+  onActionRegistryChange,
+  actionRegistry,
+}) {
   const { T, s, themeName } = useTheme();
   const [draft, setDraft] = useState(() => ({ ...config }));
   const [saved, setSaved] = useState(false);
@@ -537,6 +672,14 @@ export default function Settings({ config, onSave, onSync, syncState, syncMsg, o
                   </div>
                 )}
               </div>
+
+              <IntervalRegistryEditor
+                T={T}
+                s={s}
+                webhookUrl={draft.webhookUrl}
+                equipmentRegistry={equipmentRegistry}
+                onRegistryChange={onRegistryChange}
+              />
 
               <div style={{ ...s.card, marginBottom: 20 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>

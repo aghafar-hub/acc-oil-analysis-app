@@ -149,6 +149,60 @@ export async function getEquipmentRegistry(webhookUrl) {
   return json.equipment || [];
 }
 
+// Column order confirmed straight from the deployed Apps Script's own
+// readEquipmentRegistry(): Code, Description, AssetID, AssetClass,
+// Lubricant, Interval, Manufacturer, Model, Area. There is no Contractor
+// column on this sheet — that field lives only in this app's own bundled
+// registry — so it's never read or written here.
+function equipmentRegistryRow(eq) {
+  return [
+    eq.code || "",
+    eq.description || "",
+    eq.assetId || "",
+    eq.assetClass || "",
+    eq.lubricant || "",
+    eq.interval || "",
+    eq.manufacturer || "",
+    eq.model || "",
+    eq.area || "",
+  ];
+}
+
+// Saves one equipment's Equipment Registry fields (used today for editing
+// the sampling interval from Settings). The backend's generic updateRow
+// replaces the whole row for any sheet other than Oil Change Log, so the
+// full row is sent — every field this app already has for the equipment,
+// not just the one that changed.
+export async function updateEquipmentRegistryEntry(webhookUrl, equipment) {
+  const row = equipmentRegistryRow(equipment);
+  await postBlind(webhookUrl, {
+    action: "updateRow",
+    sheet: "Equipment Registry",
+    matchCols: [0],
+    matchValues: [equipment.code || ""],
+    row,
+  });
+
+  const verify = await getEquipmentRegistry(webhookUrl);
+  const saved = verify.find((r) => r.code === equipment.code);
+  if (!saved || String(saved.interval || "").trim() !== String(equipment.interval || "").trim()) {
+    throw new SaveVerificationError(`The sampling interval wasn't confirmed saved to the sheet — please try again.`);
+  }
+  return saved;
+}
+
+// Keeps the "Oil Sample Tracker" sheet in sync automatically whenever a new
+// sample is saved, instead of relying on someone to update it by hand too.
+// The backend already has a purpose-built endpoint for this
+// (updateSampleTrackerMonthly): it finds or creates this sample's month
+// column and writes "<status>|<display date>" into this equipment's row —
+// exactly the "STATUS|DATE" format parseTrackerRows() already expects.
+// Best-effort: like applyOilChangeSideEffect, a failure here doesn't undo
+// the sample save, it's surfaced as a separate toast by the caller.
+export async function updateSampleTracker(webhookUrl, { equipmentCode, sampleDate, status }) {
+  await postBlind(webhookUrl, { action: "updateSampleTracker", equipmentCode, sampleDate, status });
+}
+
 export async function getEquipmentRows(webhookUrl, equipmentCode) {
   return getJSON(webhookUrl, { action: "getEquipment", id: equipmentCode });
 }
