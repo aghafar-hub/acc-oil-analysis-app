@@ -343,7 +343,7 @@ export default function Settings({
       const current = loadEquipmentRegistry();
       const sheetCodes = new Set(sheetEquip.map((r) => r.code));
       const appOnly = current.filter((r) => !sheetCodes.has(r.code)).map((r) => ({ eq: r, action: "keep" }));
-      setRegistryPreview({ sheetEquip, appOnly });
+      setRegistryPreview({ sheetEquip, appOnly, current });
       setRegistryResult({ synced: sheetEquip.length, appOnlyCount: appOnly.length });
     } catch (err) {
       setRegistryResult({ error: err.message });
@@ -357,7 +357,12 @@ export default function Settings({
   function applyRegistrySync() {
     if (!registryPreview) return;
     const kept = registryPreview.appOnly.filter((item) => item.action === "keep").map((item) => item.eq);
-    const merged = [...registryPreview.sheetEquip, ...kept];
+    // The sheet has no Contractor column, so a plain overwrite would wipe
+    // that field for every equipment it already knew about — start from
+    // the prior record (keeping contractor and anything else app-only)
+    // and let the fresh sheet fields win on top of it.
+    const currentByCode = Object.fromEntries((registryPreview.current || []).map((r) => [r.code, r]));
+    const merged = [...registryPreview.sheetEquip.map((eq) => ({ ...currentByCode[eq.code], ...eq })), ...kept];
     saveEquipmentRegistry(merged);
     onRegistryChange?.(merged);
     setRegistryResult({ applied: true, total: merged.length });
