@@ -66,6 +66,7 @@ export default function Dashboard({ samples, actions, oilChanges, equipmentRegis
   const { T, s } = useTheme();
   const [statusFilter, setStatusFilter] = useState("All");
   const [areaFilter, setAreaFilter] = useState("All");
+  const [contractorFilter, setContractorFilter] = useState("All");
   const [expanded, setExpanded] = useState(null);
   const now = Date.now();
 
@@ -78,10 +79,24 @@ export default function Dashboard({ samples, actions, oilChanges, equipmentRegis
   const areas = useMemo(() => ["All", ...Array.from(new Set(registry.map((e) => e.area).filter(Boolean)))], [registry]);
   const areaCodes = areaFilter === "All" ? null : new Set(registry.filter((e) => e.area === areaFilter).map((e) => e.code));
 
-  const scopedSamples = areaCodes ? samples.filter((s2) => areaCodes.has(s2.unitId)) : samples;
-  const scopedActions = areaCodes ? actions.filter((a) => areaCodes.has(a.equipmentCode)) : actions;
-  const scopedOilChanges = areaCodes ? oilChanges.filter((o) => areaCodes.has(o.equipmentCode)) : oilChanges;
-  const scopedRegistry = areaCodes ? registry.filter((r) => areaCodes.has(r.code)) : registry;
+  const contractors = useMemo(
+    () => ["All", ...Array.from(new Set(registry.map((e) => e.contractor).filter(Boolean)))],
+    [registry]
+  );
+  const contractorCodes =
+    contractorFilter === "All" ? null : new Set(registry.filter((e) => e.contractor === contractorFilter).map((e) => e.code));
+
+  // Both filters apply together (intersection) — e.g. "Kiln" area + "RHI"
+  // contractor narrows to only equipment matching both.
+  const scopeCodes =
+    areaCodes && contractorCodes
+      ? new Set([...areaCodes].filter((c) => contractorCodes.has(c)))
+      : areaCodes || contractorCodes || null;
+
+  const scopedSamples = scopeCodes ? samples.filter((s2) => scopeCodes.has(s2.unitId)) : samples;
+  const scopedActions = scopeCodes ? actions.filter((a) => scopeCodes.has(a.equipmentCode)) : actions;
+  const scopedOilChanges = scopeCodes ? oilChanges.filter((o) => scopeCodes.has(o.equipmentCode)) : oilChanges;
+  const scopedRegistry = scopeCodes ? registry.filter((r) => scopeCodes.has(r.code)) : registry;
 
   const latestByEquip = useMemo(() => {
     const map = {};
@@ -108,7 +123,7 @@ export default function Dashboard({ samples, actions, oilChanges, equipmentRegis
   const totalWithStatus = statusCounts.Normal + statusCounts.Caution + statusCounts.Alert || 1;
   const fracNormal = statusCounts.Normal / totalWithStatus;
   const fracCaution = statusCounts.Caution / totalWithStatus;
-  const totalEquipment = areaCodes ? areaCodes.size : registry.length;
+  const totalEquipment = scopeCodes ? scopeCodes.size : registry.length;
 
   const filteredRows =
     statusFilter === "All"
@@ -362,23 +377,48 @@ export default function Dashboard({ samples, actions, oilChanges, equipmentRegis
       `}</style>
       <p style={{ ...s.sectionTitle, margin: "0 0 8px" }}>Dashboard</p>
 
-      {areas.length > 1 && (
-        <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
-          {areas.map((a) => (
-            <button
-              key={a}
-              style={{
-                ...s.btn,
-                fontSize: 12,
-                background: areaFilter === a ? T.accent : "transparent",
-                color: areaFilter === a ? T.accentText : T.textSecondary,
-                borderColor: areaFilter === a ? T.accent : T.border,
-              }}
-              onClick={() => setAreaFilter(a)}
-            >
-              {a}
-            </button>
-          ))}
+      {(areas.length > 1 || contractors.length > 1) && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 16 }}>
+          {areas.length > 1 && (
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+              <span style={{ fontSize: 11, color: T.textMuted, marginRight: 2 }}>Area:</span>
+              {areas.map((a) => (
+                <button
+                  key={a}
+                  style={{
+                    ...s.btn,
+                    fontSize: 12,
+                    background: areaFilter === a ? T.accent : "transparent",
+                    color: areaFilter === a ? T.accentText : T.textSecondary,
+                    borderColor: areaFilter === a ? T.accent : T.border,
+                  }}
+                  onClick={() => setAreaFilter(a)}
+                >
+                  {a}
+                </button>
+              ))}
+            </div>
+          )}
+          {contractors.length > 1 && (
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+              <span style={{ fontSize: 11, color: T.textMuted, marginRight: 2 }}>Contractor:</span>
+              {contractors.map((c) => (
+                <button
+                  key={c}
+                  style={{
+                    ...s.btn,
+                    fontSize: 12,
+                    background: contractorFilter === c ? T.accent : "transparent",
+                    color: contractorFilter === c ? T.accentText : T.textSecondary,
+                    borderColor: contractorFilter === c ? T.accent : T.border,
+                  }}
+                  onClick={() => setContractorFilter(c)}
+                >
+                  {c}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
