@@ -3,6 +3,7 @@ import { useTheme } from "../ThemeContext";
 import { sampleTrackerStatus } from "../parsers";
 import { trackerStatusChip as statusChip } from "../theme";
 import EquipmentSearch from "../components/EquipmentSearch";
+import DotTimeline from "../components/DotTimeline";
 
 // The real "Oil Sample Tracker" monthly grid — parsed from the sheet tab of
 // the same name, with live Data_Entry samples overlaid on top (see
@@ -120,17 +121,17 @@ export default function SampleTracker({ trackerByEquip, oilChanges, equipmentReg
           <div key={label} style={{ display: "flex", alignItems: "center", gap: 5 }}>
             <div
               style={{
-                background: color + "33",
-                color,
-                border: `1px solid ${color}66`,
-                borderRadius: 5,
-                width: 22,
-                height: 22,
+                width: 20,
+                height: 20,
+                borderRadius: "50%",
+                background: color,
+                color: "#fff",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
                 fontWeight: 800,
-                fontSize: 11,
+                fontSize: 10,
+                boxShadow: `0 0 0 1px ${color}55`,
               }}
             >
               {label}
@@ -141,22 +142,22 @@ export default function SampleTracker({ trackerByEquip, oilChanges, equipmentReg
         <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
           <div
             style={{
-              background: "#7C3AED33",
-              color: "#7C3AED",
-              border: "1px solid #7C3AED66",
-              borderRadius: 5,
-              padding: "2px 5px",
-              fontSize: 9,
-              fontWeight: 700,
+              width: 20,
+              height: 20,
+              borderRadius: "50%",
+              background: "#7C3AED",
+              color: "#fff",
               display: "flex",
               alignItems: "center",
-              gap: 2,
+              justifyContent: "center",
+              fontSize: 10,
             }}
           >
-            <i className="ti ti-droplet-filled-2" style={{ fontSize: 9 }} aria-hidden="true" /> OC
+            <i className="ti ti-droplet-filled-2" aria-hidden="true" />
           </div>
           <span style={{ fontSize: 11, color: T.textSecondary }}>Oil Changed</span>
         </div>
+        <span style={{ fontSize: 11, color: T.textMuted, marginLeft: "auto" }}>Hover a dot for its exact date.</span>
       </div>
 
       <div style={{ display: "flex", gap: 12, marginBottom: 16, flexWrap: "wrap", alignItems: "flex-end" }}>
@@ -226,113 +227,95 @@ export default function SampleTracker({ trackerByEquip, oilChanges, equipmentReg
                 overflow: "hidden",
               }}
             >
-              <div
-                style={{ padding: "12px 16px", display: "flex", alignItems: "center", gap: 10, cursor: "pointer", flexWrap: "wrap" }}
-                onClick={() => setExpanded(isOpen ? null : eq.code)}
-              >
-                {isMissing && (
-                  <span
-                    style={{
-                      width: 8,
-                      height: 8,
-                      borderRadius: "50%",
-                      flexShrink: 0,
-                      background: T.danger,
-                      animation: "pulse 1.2s ease-in-out infinite",
-                    }}
-                  />
-                )}
-                <div style={{ minWidth: 140, flex: 1 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-                    <span style={{ fontFamily: "monospace", fontWeight: 700, fontSize: 13, color: T.accent }}>{eq.code}</span>
-                    {eq.area && (
-                      <span style={{ fontSize: 10, background: T.infoBarBg, color: T.accent, borderRadius: 4, padding: "1px 6px" }}>
-                        {eq.area}
-                      </span>
-                    )}
-                  </div>
-                  <div
-                    style={{
-                      fontSize: 11,
-                      color: T.textSecondary,
-                      marginTop: 1,
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      whiteSpace: "nowrap",
-                      maxWidth: 260,
-                    }}
-                  >
-                    {eq.description}
-                  </div>
-                </div>
-                <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                  <span
-                    style={{
-                      background: color + "22",
-                      color,
-                      borderRadius: 6,
-                      padding: "3px 10px",
-                      fontSize: 11,
-                      fontWeight: 700,
-                      whiteSpace: "nowrap",
-                    }}
-                  >
-                    {status.label}
-                  </span>
-                  <span style={{ fontSize: 10, color, whiteSpace: "nowrap" }}>{status.daysInfo}</span>
-                  <span style={{ fontSize: 11, color: T.textMuted, whiteSpace: "nowrap" }}>Every {eq.interval || "—"}</span>
-                </div>
-                <div style={{ display: "flex", gap: 4, flexWrap: "wrap", justifyContent: "flex-end" }}>
-                  {shown.map((label) => {
-                    const entry = history.find((h) => h.monthLabel === label);
-                    const oc = oilChangedMonths.has(label);
-                    const chip = entry ? statusChip(entry.status) : null;
-                    return (
-                      <div key={label} style={{ display: "flex", gap: 2, alignItems: "center" }}>
-                        {chip && (
-                          <div
-                            title={`${label}: ${entry.status}${entry.date && entry.date !== label ? " (" + entry.date + ")" : ""}`}
-                            style={{
-                              background: chip.color + "33",
-                              color: chip.color,
-                              border: `1px solid ${chip.color}66`,
-                              borderRadius: 6,
-                              padding: "2px 6px",
-                              fontSize: 10,
-                              fontWeight: 800,
-                              minWidth: 24,
-                              textAlign: "center",
-                            }}
-                          >
-                            {chip.label}
-                          </div>
-                        )}
-                        {oc && (
-                          <div
-                            title={`Oil changed — ${label}`}
-                            style={{
-                              background: "#7C3AED33",
-                              color: "#7C3AED",
-                              border: "1px solid #7C3AED66",
-                              borderRadius: 6,
-                              padding: "2px 5px",
-                              fontSize: 9,
-                              fontWeight: 700,
-                              display: "flex",
-                              alignItems: "center",
-                              gap: 2,
-                            }}
-                          >
-                            <i className="ti ti-droplet-filled-2" style={{ fontSize: 9 }} aria-hidden="true" /> OC
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                  {!isOpen && months.length > 6 && (
-                    <div style={{ background: T.cardSubBg, color: T.textMuted, borderRadius: 6, padding: "2px 6px", fontSize: 10 }}>
-                      +{months.length - 6}
+              <div style={{ padding: "12px 16px", cursor: "pointer" }} onClick={() => setExpanded(isOpen ? null : eq.code)}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                  {isMissing && (
+                    <span
+                      style={{
+                        width: 8,
+                        height: 8,
+                        borderRadius: "50%",
+                        flexShrink: 0,
+                        background: T.danger,
+                        animation: "pulse 1.2s ease-in-out infinite",
+                      }}
+                    />
+                  )}
+                  <div style={{ minWidth: 140, flex: 1 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                      <span style={{ fontFamily: "monospace", fontWeight: 700, fontSize: 13, color: T.accent }}>{eq.code}</span>
+                      {eq.area && (
+                        <span style={{ fontSize: 10, background: T.infoBarBg, color: T.accent, borderRadius: 4, padding: "1px 6px" }}>
+                          {eq.area}
+                        </span>
+                      )}
                     </div>
+                    <div
+                      style={{
+                        fontSize: 11,
+                        color: T.textSecondary,
+                        marginTop: 1,
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                        maxWidth: 260,
+                      }}
+                    >
+                      {eq.description}
+                    </div>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                    <span
+                      style={{
+                        background: color + "22",
+                        color,
+                        borderRadius: 6,
+                        padding: "3px 10px",
+                        fontSize: 11,
+                        fontWeight: 700,
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {status.label}
+                    </span>
+                    <span style={{ fontSize: 10, color, whiteSpace: "nowrap" }}>{status.daysInfo}</span>
+                    <span style={{ fontSize: 11, color: T.textMuted, whiteSpace: "nowrap" }}>Every {eq.interval || "—"}</span>
+                  </div>
+                </div>
+
+                <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 12 }}>
+                  <DotTimeline
+                    dots={[...shown].reverse().map((label, i, arr) => {
+                      const entry = history.find((h) => h.monthLabel === label);
+                      const oc = oilChangedMonths.has(label);
+                      const chip = entry ? statusChip(entry.status) : null;
+                      return {
+                        key: label,
+                        pct: arr.length > 1 ? (i / (arr.length - 1)) * 100 : 50,
+                        letter: chip ? chip.label : "—",
+                        color: chip ? chip.color : T.textMuted,
+                        tooltip: `${label}: ${entry ? entry.status : "No entry"}${
+                          entry?.date && entry.date !== label ? " (" + entry.date + ")" : ""
+                        }${oc ? " · Oil changed" : ""}`,
+                        accent: oc,
+                        accentTooltip: oc ? `Oil changed — ${label}` : undefined,
+                      };
+                    })}
+                  />
+                  {!isOpen && months.length > 6 && (
+                    <span
+                      style={{
+                        flexShrink: 0,
+                        background: T.cardSubBg,
+                        color: T.textMuted,
+                        borderRadius: 999,
+                        padding: "2px 8px",
+                        fontSize: 10,
+                        fontWeight: 700,
+                      }}
+                    >
+                      +{months.length - 6}
+                    </span>
                   )}
                 </div>
               </div>

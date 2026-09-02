@@ -4,6 +4,7 @@ import { formatDate } from "../parsers";
 import EquipmentSearch from "../components/EquipmentSearch";
 import EditOilChangeModal from "../components/EditOilChangeModal";
 import GenerateOilChangeActionsModal from "../components/GenerateOilChangeActionsModal";
+import DotTimeline from "../components/DotTimeline";
 
 const WINDOW_BACK = 30;
 const WINDOW_FWD = 90;
@@ -24,6 +25,18 @@ function urgencyColor(T, days) {
   if (days <= 7) return T.warning;
   if (days <= 30) return T.accent;
   return T.success;
+}
+
+// Single-letter code for a due-date dot, mirroring the same four buckets
+// as the page's own summary cards (Overdue / Due this week / Due this
+// month / On track) so the dot's letter and the counts above it always
+// agree.
+function urgencyLetter(days) {
+  if (days == null) return "?";
+  if (days < 0) return "O";
+  if (days <= 7) return "W";
+  if (days <= 30) return "M";
+  return "T";
 }
 
 // Every lubrication point plotted by its own next due date instead of an
@@ -138,62 +151,21 @@ export default function OilChangeLog({ oilChanges, actions, equipmentRegistry, o
     const clamped = days == null ? WINDOW_FWD : Math.max(-WINDOW_BACK, Math.min(WINDOW_FWD, days));
     const pct = ((clamped + WINDOW_BACK) / WINDOW_TOTAL) * 100;
     const todayPct = (WINDOW_BACK / WINDOW_TOTAL) * 100;
-    const color = urgencyColor(T, days);
     const label = days == null ? "no due date" : days < 0 ? `${Math.abs(days)}d overdue` : days === 0 ? "due today" : `in ${days}d`;
-    // Points near the right edge of the track would otherwise print their
-    // label past the track's own bounds and on top of the row's edit
-    // button — flip the label to the dot's left once it gets close enough.
-    const labelOnLeft = pct > 78;
     return (
-      <div style={{ position: "relative", flex: 1, height: 28 }}>
-        {[0, 25, 50, 75, 100].map((g) => (
-          <span key={g} style={{ position: "absolute", left: `${g}%`, top: -6, bottom: -6, width: 1, background: T.border2 }} />
-        ))}
-        <div
-          style={{
-            position: "absolute",
-            inset: 0,
-            top: "50%",
-            transform: "translateY(-50%)",
-            height: 6,
-            borderRadius: 999,
-            background: T.cardSubBg,
-            border: `1px solid ${T.border2}`,
-          }}
-        />
-        <span
-          style={{ position: "absolute", left: `${todayPct}%`, top: -10, bottom: -10, width: 2, background: T.accent, borderRadius: 2 }}
-        />
-        <span
-          title={`${formatDate(p.oilChange.nextDueDate) || "no due date"} — ${label}`}
-          style={{
-            position: "absolute",
-            left: `${pct}%`,
-            top: "50%",
-            transform: "translate(-50%,-50%)",
-            width: 14,
-            height: 14,
-            borderRadius: "50%",
-            border: `2.5px solid ${T.cardBg}`,
-            background: color,
-            boxShadow: "0 2px 8px rgba(0,0,0,0.25)",
-          }}
-        />
-        <span
-          style={{
-            position: "absolute",
-            ...(labelOnLeft ? { right: `calc(${100 - pct}% + 12px)` } : { left: `calc(${pct}% + 12px)` }),
-            top: "50%",
-            transform: "translateY(-50%)",
-            fontSize: 10,
-            fontWeight: 700,
-            color,
-            whiteSpace: "nowrap",
-          }}
-        >
-          {label}
-        </span>
-      </div>
+      <DotTimeline
+        todayPct={todayPct}
+        ticks={[0, 25, 50, 75, 100]}
+        dots={[
+          {
+            key: p.oilChange._id,
+            pct,
+            letter: urgencyLetter(days),
+            color: urgencyColor(T, days),
+            tooltip: days == null ? "No due date scheduled" : `${formatDate(p.oilChange.nextDueDate)} — ${label}`,
+          },
+        ]}
+      />
     );
   }
 
@@ -383,20 +355,47 @@ export default function OilChangeLog({ oilChanges, actions, equipmentRegistry, o
         {bodyContent}
       </div>
 
-      <div style={{ display: "flex", alignItems: "center", gap: 16, fontSize: 11.5, color: T.textMuted, flexWrap: "wrap" }}>
-        <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
-          <span style={{ width: 8, height: 8, borderRadius: "50%", background: T.danger }} /> Overdue
-        </span>
-        <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
-          <span style={{ width: 8, height: 8, borderRadius: "50%", background: T.warning }} /> Due within 7 days
-        </span>
-        <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
-          <span style={{ width: 8, height: 8, borderRadius: "50%", background: T.accent }} /> Due within 30 days
-        </span>
-        <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
-          <span style={{ width: 8, height: 8, borderRadius: "50%", background: T.success }} /> On track
-        </span>
-        <span>Window shown: 30 days ago → 90 days ahead.</span>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 14,
+          flexWrap: "wrap",
+          background: T.cardSubBg,
+          border: `1px solid ${T.border}`,
+          borderRadius: 8,
+          padding: "8px 14px",
+        }}
+      >
+        <span style={{ fontSize: 11, color: T.textMuted, fontWeight: 700, marginRight: 2 }}>Legend:</span>
+        {[
+          ["O", T.danger, "Overdue"],
+          ["W", T.warning, "Due within 7 days"],
+          ["M", T.accent, "Due within 30 days"],
+          ["T", T.success, "On track"],
+        ].map(([letter, color, desc]) => (
+          <div key={letter} style={{ display: "flex", alignItems: "center", gap: 5 }}>
+            <div
+              style={{
+                width: 18,
+                height: 18,
+                borderRadius: "50%",
+                background: color,
+                color: "#fff",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                fontWeight: 800,
+                fontSize: 9,
+                boxShadow: `0 0 0 1px ${color}55`,
+              }}
+            >
+              {letter}
+            </div>
+            <span style={{ fontSize: 11, color: T.textSecondary }}>{desc}</span>
+          </div>
+        ))}
+        <span style={{ fontSize: 11, color: T.textMuted, marginLeft: "auto" }}>Hover a dot for its exact due date.</span>
       </div>
 
       {editing && <EditOilChangeModal oilChange={editing} saving={saving} onClose={() => setEditing(null)} onSave={handleSave} />}
