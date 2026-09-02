@@ -39,7 +39,7 @@ export default function Sidebar({
           <img
             src={logoUrl || logo}
             alt="Arabian Cement Logo"
-            style={{ height: 64, width: "auto", maxWidth: 195, objectFit: "contain", flexShrink: 0 }}
+            style={{ width: 188, height: "auto", objectFit: "contain", flexShrink: 0 }}
           />
         </div>
         <p style={{ fontSize: 9, color: "#4A6A8A", margin: 0, letterSpacing: 0.8, textTransform: "uppercase" }}>Oil Analysis Management</p>
