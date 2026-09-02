@@ -64,7 +64,7 @@ function SampleTimeline({ samples, unitId }) {
                   ? triggers.map((t) => (
                       <span key={t.label}>
                         {t.label}:{" "}
-                        <span style={{ color: T.danger, fontWeight: 700 }}>
+                        <span style={{ color: t.severity === "Caution" ? T.warning : T.danger, fontWeight: 700 }}>
                           {t.value}
                           {t.unit ? ` ${t.unit}` : ""}
                         </span>

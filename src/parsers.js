@@ -195,10 +195,50 @@ export const SAMPLE_TRIGGER_CHECKS = [
   { label: "TAN", unit: "mg KOH/g", limit: 1, get: (sm) => (sm.tan === "" ? null : parseFloat(sm.tan)) },
 ];
 
+// Value/unit lookup for every parameter a lab report can flag — covers the
+// full wear/contaminant/additive breakdown, not just the curated
+// SAMPLE_TRIGGER_CHECKS subset, since the lab's own flags (from an imported
+// PDF) can call out any of them.
+const PARAM_INFO = {
+  Ag: { unit: "ppm", get: (sm) => sm.wear?.Ag },
+  Al: { unit: "ppm", get: (sm) => sm.wear?.Al },
+  Cr: { unit: "ppm", get: (sm) => sm.wear?.Cr },
+  Cu: { unit: "ppm", get: (sm) => sm.wear?.Cu },
+  Fe: { unit: "ppm", get: (sm) => sm.wear?.Fe },
+  Mo: { unit: "ppm", get: (sm) => sm.wear?.Mo },
+  Ni: { unit: "ppm", get: (sm) => sm.wear?.Ni },
+  Pb: { unit: "ppm", get: (sm) => sm.wear?.Pb },
+  Sn: { unit: "ppm", get: (sm) => sm.wear?.Sn },
+  K: { unit: "ppm", get: (sm) => sm.contaminants?.K },
+  Na: { unit: "ppm", get: (sm) => sm.contaminants?.Na },
+  Si: { unit: "ppm", get: (sm) => sm.contaminants?.Si },
+  B: { unit: "ppm", get: (sm) => sm.additives?.B },
+  Ba: { unit: "ppm", get: (sm) => sm.additives?.Ba },
+  Ca: { unit: "ppm", get: (sm) => sm.additives?.Ca },
+  Mg: { unit: "ppm", get: (sm) => sm.additives?.Mg },
+  P: { unit: "ppm", get: (sm) => sm.additives?.P },
+  Zn: { unit: "ppm", get: (sm) => sm.additives?.Zn },
+  Visc: { unit: "cSt", get: (sm) => sm.visc40C },
+  Oxidation: { unit: "Ab/cm", get: (sm) => sm.oxidation },
+  Water: { unit: "%", get: (sm) => sm.water },
+  TAN: { unit: "mg KOH/g", get: (sm) => sm.tan },
+  PQIndex: { unit: "", get: (sm) => sm.pqIndex },
+};
+
 // For a Caution/Alert sample, which of its own readings actually crossed a
 // limit — so a timeline can show "Water: 0.15%" instead of always the same
 // fixed Visc/Fe/Si/Water snapshot regardless of what was actually wrong.
+// Samples imported from a lab PDF carry the lab's own real flagged
+// parameters (see flaggedReadings / parseFlaggedParams) — those are used
+// when present, since they're more accurate than this app's own guessed
+// limits; manually-entered samples fall back to SAMPLE_TRIGGER_CHECKS.
 export function sampleTriggerReadings(sm) {
+  if (sm?.flaggedReadings?.length) {
+    return sm.flaggedReadings.map(({ param, severity }) => {
+      const info = PARAM_INFO[param];
+      return { label: param, unit: info?.unit || "", value: info ? info.get(sm) : undefined, severity };
+    });
+  }
   return SAMPLE_TRIGGER_CHECKS.map((c) => ({ ...c, value: c.get(sm) })).filter(
     (c) => c.value !== "" && c.value != null && !isNaN(c.value) && c.value > c.limit
   );
@@ -395,12 +435,40 @@ export function oilChangeToRow(o) {
 }
 
 // ── Data_Entry (samples) ─────────────────────────────────────────────────
-// 37 columns: the 36 data columns below, plus Last Modified at index 36.
+// 38 columns: the 37 data columns below, plus Last Modified at index 37.
 // Column 34 ("Alert Type") is real sheet data — a short classification like
 // "Caution – Elevated Fe & Si" — distinct from column 35 ("Sample Analysis",
 // the longer free-text recommendation). Both the original app and an early
 // version of this rebuild silently dropped Alert Type; confirmed against the
 // live sheet (openpyxl inspection) and fixed here.
+// Column 36 ("Flagged Parameters") holds which specific readings the lab
+// itself flagged Alert/Caution for that sample — e.g. "Cu:Alert,Fe:Alert" —
+// captured from cell-level color coding in imported PDF lab reports, which
+// carries more detail than the four rollup ratings alone (a single wear
+// metal can be flagged even when the overall Contamination Rating is only
+// Caution). Manually-entered samples leave this blank.
+
+// Parses "Cu:Alert,Fe:Alert,Al:Caution" into [{ param, severity }, ...].
+export function parseFlaggedParams(raw) {
+  if (!raw) return [];
+  return String(raw)
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter(Boolean)
+    .map((entry) => {
+      const [param, severity] = entry.split(":").map((x) => (x || "").trim());
+      return { param, severity };
+    })
+    .filter((f) => f.param && f.severity);
+}
+
+// Inverse of parseFlaggedParams — used when saving a sample.
+export function formatFlaggedParams(list) {
+  return (list || [])
+    .filter((f) => f && f.param && f.severity)
+    .map((f) => `${f.param}:${f.severity}`)
+    .join(",");
+}
 
 export function rowToSample(row) {
   const [
@@ -440,6 +508,7 @@ export function rowToSample(row) {
     Zn,
     alertType,
     recommendationsRaw,
+    flaggedParamsRaw,
   ] = row;
   const num = (v) => (v === "" || v === null || v === undefined ? "" : parseFloat(v));
   return {
@@ -464,6 +533,7 @@ export function rowToSample(row) {
     contaminants: { K, Na, Si },
     additives: { B, Ba, Ca, Mg, P, Zn },
     recommendations: recommendationsRaw ? [recommendationsRaw] : [],
+    flaggedReadings: parseFlaggedParams(flaggedParamsRaw),
     _id: `${unitId}_${sampleId}_${sampledDate}`,
     _matchCols: [0, 2],
     _matchValues: [unitId, sampleId],
@@ -511,5 +581,6 @@ export function sampleToRow(s) {
     additives.Zn || "",
     s.alertType || "",
     (s.recommendations || []).join("; "),
+    formatFlaggedParams(s.flaggedReadings),
   ];
 }

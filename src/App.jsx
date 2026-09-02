@@ -254,6 +254,55 @@ function AppShell({ config, setConfig }) {
     [config.webhookUrl, pushToast, applySampleTrackerSideEffect]
   );
 
+  // Bulk PDF import's confirm step, after the review popup. Writes are
+  // sequential — the backend's "find the next empty row" append logic
+  // isn't safe for concurrent writes — and each sample also updates its own
+  // month's Oil Sample Tracker cell (not just the newest one, since a
+  // backfilled older sample belongs in its own historical column). A full
+  // resync happens once at the end rather than after every sample, since
+  // that's what applySampleTrackerSideEffect would otherwise do up to 150
+  // times in a large batch.
+  const onBulkAddSamples = useCallback(
+    async (samplesToAdd, onProgress) => {
+      const savedSamples = [];
+      let errors = 0;
+      for (let i = 0; i < samplesToAdd.length; i++) {
+        const sample = samplesToAdd[i];
+        try {
+          const saved = await api.saveSample(config.webhookUrl, sample);
+          savedSamples.push(saved);
+          try {
+            await api.updateSampleTracker(config.webhookUrl, {
+              equipmentCode: saved.unitId,
+              sampleDate: saved.sampledDate,
+              status: saved.reportStatus,
+            });
+          } catch {
+            // best-effort, matches applySampleTrackerSideEffect — the sample itself is still saved
+          }
+        } catch (err) {
+          errors++;
+          pushToast(`${sample.unitId} / ${sample.sampleId}: ${err.message}`, "error");
+        }
+        onProgress?.(i + 1, samplesToAdd.length, errors);
+      }
+      if (savedSamples.length) {
+        setSamples((prev) => {
+          const next = [...prev, ...savedSamples];
+          writeCache("samples", next);
+          return next;
+        });
+        await runSync();
+      }
+      pushToast(
+        `Bulk import: ${savedSamples.length} sample${savedSamples.length === 1 ? "" : "s"} added${errors ? `, ${errors} failed` : ""}.`,
+        errors ? "error" : "success"
+      );
+      return { saved: savedSamples.length, failed: errors };
+    },
+    [config.webhookUrl, pushToast, runSync]
+  );
+
   const onEditSample = useCallback(
     async (original, updates) => {
       try {
@@ -490,6 +539,7 @@ function AppShell({ config, setConfig }) {
               equipmentRegistry={equipmentRegistry}
               existingSamples={samples}
               onAdd={onAddSample}
+              onBulkAdd={onBulkAddSamples}
             />
           )}
           {page === "actions" && (
