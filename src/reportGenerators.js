@@ -29,7 +29,7 @@ const ACTION_STATUS_COLOR = {
   Closed: BRAND.success,
 };
 
-const LOGO_ASPECT = 160 / 84;
+const LOGO_ASPECT = 602 / 316;
 
 function toFileDate() {
   return new Date().toISOString().slice(0, 10);
