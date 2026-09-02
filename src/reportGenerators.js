@@ -1,6 +1,6 @@
 import { jsPDF } from "jspdf";
 import { autoTable } from "jspdf-autotable";
-import { formatDate, parseTrackerRows, sampleTrackerStatus, intervalMonths } from "./parsers";
+import { formatDate, sampleTrackerStatus, intervalMonths } from "./parsers";
 import logoUrl from "./assets/arabian-cement-logo.png";
 
 // Four printable-to-PDF reports, generated entirely client-side from the
@@ -674,13 +674,12 @@ export async function generateOilChangeContractorReport({ oilChanges, equipmentR
 // Same OK/OVERDUE/MISSING classification as the Sample Tracker page
 // (sampleTrackerStatus, against each equipment's own sampling interval),
 // listing only what's flagged — MISSING first, then OVERDUE, worst first.
-function buildSampleSection(doc, { trackerRaw, equipmentRegistry, contractor = "All" }, y) {
-  const trackerByEquip = parseTrackerRows(trackerRaw);
+function buildSampleSection(doc, { trackerByEquip, equipmentRegistry, contractor = "All" }, y) {
   let registry = equipmentRegistry || [];
   if (contractor !== "All") registry = registry.filter((r) => r.contractor === contractor);
 
   const rows = registry.map((eq) => {
-    const history = trackerByEquip[eq.code] || [];
+    const history = (trackerByEquip || {})[eq.code] || [];
     const lastDate = history[0]?.date || "";
     const status = sampleTrackerStatus(lastDate, eq.interval);
     return { eq, lastDate, status, sortDays: sampleOverdueDays(lastDate, eq.interval) ?? -999999 };
@@ -767,15 +766,15 @@ function buildSampleSection(doc, { trackerRaw, equipmentRegistry, contractor = "
   return y;
 }
 
-export async function generateSampleOverdueReport({ trackerRaw, equipmentRegistry, contractor = "All" }) {
+export async function generateSampleOverdueReport({ trackerByEquip, equipmentRegistry, contractor = "All" }) {
   const doc = await newDoc("Oil Sample Missing / Overdue Report", scopeLineFor(contractor));
-  buildSampleSection(doc, { trackerRaw, equipmentRegistry, contractor }, 98);
+  buildSampleSection(doc, { trackerByEquip, equipmentRegistry, contractor }, 98);
   addFooter(doc);
   doc.save(`Oil-Sample-Missing-Overdue-Report${fileSuffixFor(contractor)}-${toFileDate()}.pdf`);
 }
 
 // ── Combined report: all three sections in one PDF ──────────────────────
-export async function generateCombinedReport({ actions, oilChanges, equipmentRegistry, trackerRaw, contractor = "All" }) {
+export async function generateCombinedReport({ actions, oilChanges, equipmentRegistry, trackerByEquip, contractor = "All" }) {
   const doc = await newDoc("Combined Maintenance Report", scopeLineFor(contractor));
   let y = 98;
 
@@ -788,7 +787,7 @@ export async function generateCombinedReport({ actions, oilChanges, equipmentReg
 
   doc.addPage();
   y = bigSectionHeader(doc, "3. Oil Sample Missing / Overdue", 50);
-  buildSampleSection(doc, { trackerRaw, equipmentRegistry, contractor }, y);
+  buildSampleSection(doc, { trackerByEquip, equipmentRegistry, contractor }, y);
 
   addFooter(doc);
   doc.save(`Combined-Maintenance-Report${fileSuffixFor(contractor)}-${toFileDate()}.pdf`);

@@ -18,6 +18,7 @@ import Settings from "./pages/Settings";
 import { loadConfig, saveConfig, readCache, writeCache } from "./config";
 import { loadEquipmentRegistry } from "./equipmentRegistry";
 import { loadActionRegistry } from "./actionRegistry";
+import { parseTrackerRows, overlaySamplesOnTracker } from "./parsers";
 import * as api from "./api";
 
 let toastId = 0;
@@ -49,6 +50,14 @@ function AppShell({ config, setConfig }) {
   const [syncState, setSyncState] = useState("idle");
   const [syncMsg, setSyncMsg] = useState("");
   const [toasts, setToasts] = useState([]);
+
+  // The tracker sheet only reflects samples added through this app (or
+  // manually kept in sync by hand); Data_Entry is always current, since
+  // every sample lands there regardless of how it was entered. Overlaying
+  // samples on top of the sheet's parsed history means every tracker
+  // consumer (Sample Tracker page, Reports, Oil Report Search) shows the
+  // real current state even when the sheet itself has drifted.
+  const trackerByEquip = useMemo(() => overlaySamplesOnTracker(parseTrackerRows(trackerRaw), samples), [trackerRaw, samples]);
 
   const pushToast = useCallback((message, type = "info") => {
     const id = ++toastId;
@@ -469,7 +478,7 @@ function AppShell({ config, setConfig }) {
               actions={actions}
               equipmentRegistry={equipmentRegistry}
               actionRegistry={actionRegistry}
-              trackerRaw={trackerRaw}
+              trackerByEquip={trackerByEquip}
               onAddAction={onAddAction}
               onUpdateAction={onUpdateAction}
               initialCode={oilReportCode}
@@ -505,9 +514,11 @@ function AppShell({ config, setConfig }) {
             />
           )}
           {page === "reports" && (
-            <Reports actions={actions} oilChanges={oilChanges} equipmentRegistry={equipmentRegistry} trackerRaw={trackerRaw} />
+            <Reports actions={actions} oilChanges={oilChanges} equipmentRegistry={equipmentRegistry} trackerByEquip={trackerByEquip} />
           )}
-          {page === "tracker" && <SampleTracker trackerRaw={trackerRaw} oilChanges={oilChanges} equipmentRegistry={equipmentRegistry} />}
+          {page === "tracker" && (
+            <SampleTracker trackerByEquip={trackerByEquip} oilChanges={oilChanges} equipmentRegistry={equipmentRegistry} />
+          )}
           {page === "howto" && <HowToUse />}
           {page === "settings" && (
             <Settings

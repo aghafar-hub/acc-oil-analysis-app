@@ -102,6 +102,50 @@ export function parseTrackerRows(rows) {
   return result;
 }
 
+// Overlays live Data_Entry samples on top of the tracker sheet's parsed
+// history, so an equipment's status always reflects the most recent real
+// sample — even one entered straight into the sheet and never routed
+// through "Add Sample" (which is the only path that also writes the
+// tracker sheet). A sample wins over whatever the sheet says for its own
+// equipment+month; a month the sheet has (including an explicit MISSING)
+// that Data_Entry has no sample for is left untouched, so a genuine gap
+// still shows as a gap.
+export function overlaySamplesOnTracker(trackerByEquip, samples) {
+  const latestByCode = new Map(); // code -> Map("year-month" -> sample)
+  for (const smp of samples || []) {
+    const code = smp.unitId;
+    if (!code || !smp.sampledDate) continue;
+    const d = new Date(smp.sampledDate);
+    if (isNaN(d)) continue;
+    const monthKey = `${d.getFullYear()}-${d.getMonth()}`;
+    let byMonth = latestByCode.get(code);
+    if (!byMonth) latestByCode.set(code, (byMonth = new Map()));
+    const existing = byMonth.get(monthKey);
+    if (!existing || d.getTime() > new Date(existing.sampledDate).getTime()) byMonth.set(monthKey, smp);
+  }
+
+  const allCodes = new Set([...Object.keys(trackerByEquip || {}), ...latestByCode.keys()]);
+  const result = {};
+  for (const code of allCodes) {
+    const byMonth = new Map();
+    for (const entry of trackerByEquip?.[code] || []) {
+      const d = new Date(entry.sortDate);
+      byMonth.set(`${d.getFullYear()}-${d.getMonth()}`, entry);
+    }
+    for (const [monthKey, smp] of latestByCode.get(code) || []) {
+      const d = new Date(smp.sampledDate);
+      byMonth.set(monthKey, {
+        monthLabel: d.toLocaleDateString("en-GB", { month: "short", year: "numeric" }),
+        status: smp.reportStatus || "",
+        date: smp.sampledDate,
+        sortDate: d.getTime(),
+      });
+    }
+    result[code] = [...byMonth.values()].sort((a, b) => b.sortDate - a.sortDate);
+  }
+  return result;
+}
+
 // Parses an equipment's sampling interval text ("6 Months", "3 Months",
 // "Monthly", "Oil Analysis", "1 y", "If needed") into a number of months,
 // or null if there's no fixed interval.

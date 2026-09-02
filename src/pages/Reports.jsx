@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useTheme } from "../ThemeContext";
-import { parseTrackerRows, sampleTrackerStatus } from "../parsers";
+import { sampleTrackerStatus } from "../parsers";
 import {
   generateContractorActionReport,
   generateOilChangeContractorReport,
@@ -102,7 +102,7 @@ function ReportCard({
 // already loaded in the app — no server round trip. Each card lets you
 // scope the report to one contractor (or all of them) and shows a live
 // preview of what will be in the PDF before it's generated.
-export default function Reports({ actions, oilChanges, equipmentRegistry, trackerRaw }) {
+export default function Reports({ actions, oilChanges, equipmentRegistry, trackerByEquip }) {
   const { T, s } = useTheme();
   const [generating, setGenerating] = useState(null); // "action" | "oilchange" | "sample" | "combined" | null
   const [actionContractor, setActionContractor] = useState(ALL);
@@ -120,8 +120,6 @@ export default function Reports({ actions, oilChanges, equipmentRegistry, tracke
     () => [ALL, ...Array.from(new Set((equipmentRegistry || []).map((r) => r.contractor).filter(Boolean))).sort()],
     [equipmentRegistry]
   );
-
-  const trackerByEquip = useMemo(() => parseTrackerRows(trackerRaw), [trackerRaw]);
 
   function actionCounts(contractor) {
     let active = (actions || []).filter((a) => FOCUS_STATUSES.includes(a.status));
@@ -146,7 +144,7 @@ export default function Reports({ actions, oilChanges, equipmentRegistry, tracke
     let missing = 0;
     let overdue = 0;
     registry.forEach((eq) => {
-      const history = trackerByEquip[eq.code] || [];
+      const history = (trackerByEquip || {})[eq.code] || [];
       const status = sampleTrackerStatus(history[0]?.date || "", eq.interval);
       if (status.label === "MISSING") missing++;
       else if (status.label === "OVERDUE") overdue++;
@@ -174,9 +172,9 @@ export default function Reports({ actions, oilChanges, equipmentRegistry, tracke
       if (kind === "action") await generateContractorActionReport({ actions, equipmentRegistry, contractor: actionContractor });
       else if (kind === "oilchange")
         await generateOilChangeContractorReport({ oilChanges, equipmentRegistry, actions, contractor: oilChangeContractor });
-      else if (kind === "sample") await generateSampleOverdueReport({ trackerRaw, equipmentRegistry, contractor: sampleContractor });
+      else if (kind === "sample") await generateSampleOverdueReport({ trackerByEquip, equipmentRegistry, contractor: sampleContractor });
       else if (kind === "combined")
-        await generateCombinedReport({ actions, oilChanges, equipmentRegistry, trackerRaw, contractor: combinedContractor });
+        await generateCombinedReport({ actions, oilChanges, equipmentRegistry, trackerByEquip, contractor: combinedContractor });
     } finally {
       setGenerating(null);
     }

@@ -1,14 +1,16 @@
 import { useMemo, useState } from "react";
 import { useTheme } from "../ThemeContext";
-import { parseTrackerRows, sampleTrackerStatus } from "../parsers";
+import { sampleTrackerStatus } from "../parsers";
 import { trackerStatusChip as statusChip } from "../theme";
 import EquipmentSearch from "../components/EquipmentSearch";
 
 // The real "Oil Sample Tracker" monthly grid — parsed from the sheet tab of
-// the same name (via trackerRaw), not derived from Data_Entry. Each
-// equipment gets a card showing its recent months as colored chips (N/C/A/M
-// letter codes) plus a droplet badge for months an oil change happened.
-export default function SampleTracker({ trackerRaw, oilChanges, equipmentRegistry }) {
+// the same name, with live Data_Entry samples overlaid on top (see
+// overlaySamplesOnTracker in parsers.js) so it reflects the current state
+// even when a sample was added straight to the sheet. Each equipment gets a
+// card showing its recent months as colored chips (N/C/A/M letter codes)
+// plus a droplet badge for months an oil change happened.
+export default function SampleTracker({ trackerByEquip, oilChanges, equipmentRegistry }) {
   const { T, s } = useTheme();
   const [equipCode, setEquipCode] = useState("");
   const [areaFilter, setAreaFilter] = useState("All");
@@ -17,7 +19,6 @@ export default function SampleTracker({ trackerRaw, oilChanges, equipmentRegistr
   const [expanded, setExpanded] = useState(null);
 
   const registry = equipmentRegistry || [];
-  const trackerByEquip = useMemo(() => parseTrackerRows(trackerRaw), [trackerRaw]);
 
   const oilChangedMonthsByEquip = useMemo(() => {
     const map = {};

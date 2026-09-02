@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useTheme } from "../ThemeContext";
-import { formatDate, sampleTriggerReadings, parseTrackerRows, sampleTrackerStatus } from "../parsers";
+import { formatDate, sampleTriggerReadings, sampleTrackerStatus } from "../parsers";
 import { trackerStatusChip } from "../theme";
 import LastActionsPanel from "../components/LastActionsPanel";
 import LineChart from "../components/LineChart";
@@ -78,7 +78,7 @@ export default function OilReportSearch({
   actions,
   equipmentRegistry,
   actionRegistry,
-  trackerRaw,
+  trackerByEquip,
   onAddAction,
   onUpdateAction,
   initialCode,
@@ -115,9 +115,12 @@ export default function OilReportSearch({
 
   // Condensed, single-equipment slice of the same "Oil Sample Tracker"
   // monthly grid the dedicated Sample Tracker page shows for everyone —
-  // not derived from Data_Entry, so it can flag a month with no sample at
-  // all, which the Sample Timeline above (built from Data_Entry) can't.
-  const trackerHistory = equipCode !== "All" ? parseTrackerRows(trackerRaw)[equipCode] || [] : [];
+  // the tracker sheet's history with live samples overlaid on top (see
+  // overlaySamplesOnTracker in parsers.js), so it stays current even for a
+  // sample entered straight into the sheet, while a month with no sample
+  // at all still shows as a gap (which the Sample Timeline above, built
+  // purely from Data_Entry, can't).
+  const trackerHistory = equipCode !== "All" ? (trackerByEquip || {})[equipCode] || [] : [];
   const trackerOilChangedMonths = new Set(
     (oilChanges || [])
       .filter((o) => o.equipmentCode === equipCode && o.changeDate)
