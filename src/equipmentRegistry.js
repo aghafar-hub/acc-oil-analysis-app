@@ -11,15 +11,18 @@ import { DEFAULT_EQUIPMENT_REGISTRY } from "./equipmentRegistryDefault";
 // survives across sessions independent of the sample/action cache.
 const KEY = "oilapp_equipment_registry";
 
-// The live "Equipment Registry" sheet has no Contractor column — it's an
-// app-only field that starts out populated from the bundled default. A
-// "Sync Equipment Registry" run in Settings used to overwrite each synced
-// equipment with the sheet's own (contractor-less) record, silently wiping
-// this field. That's fixed in Settings now, but browsers that already ran
-// a sync before the fix are stuck with the emptied-out result in
-// localStorage — this backfills any equipment missing its contractor from
-// the bundled default, so those sessions repair themselves on next load
-// without anyone having to notice or re-sync.
+// The sheet DOES carry Contractor (column J) — the Apps Script's
+// readEquipmentRegistry() just never read that far (it stopped at column
+// I / Area), so every "Sync Equipment Registry" run in Settings overwrote
+// each synced equipment with a contractor-less record from the backend,
+// silently wiping the field. That backend function is fixed too now, but
+// browsers that already ran a sync before both fixes landed are stuck with
+// the emptied-out result in localStorage, and the backend fix alone can't
+// reach back and repair it — this backfills any equipment still missing
+// its contractor from the bundled default (itself a real snapshot of the
+// sheet) so those sessions repair themselves on next load. It's a stopgap:
+// running "Sync Equipment Registry" again after the backend fix is applied
+// pulls each equipment's real, current contractor straight from column J.
 function backfillContractor(list) {
   const defaultByCode = new Map(DEFAULT_EQUIPMENT_REGISTRY.map((r) => [r.code, r]));
   let changed = false;

@@ -357,12 +357,19 @@ export default function Settings({
   function applyRegistrySync() {
     if (!registryPreview) return;
     const kept = registryPreview.appOnly.filter((item) => item.action === "keep").map((item) => item.eq);
-    // The sheet has no Contractor column, so a plain overwrite would wipe
-    // that field for every equipment it already knew about — start from
-    // the prior record (keeping contractor and anything else app-only)
-    // and let the fresh sheet fields win on top of it.
+    // Contractor lives in column J of the sheet, so a normal overwrite is
+    // fine once the backend reads it — but fall back to the prior known
+    // value when the sheet's cell (or an older, not-yet-updated backend
+    // deployment) leaves it blank, rather than losing it outright.
     const currentByCode = Object.fromEntries((registryPreview.current || []).map((r) => [r.code, r]));
-    const merged = [...registryPreview.sheetEquip.map((eq) => ({ ...currentByCode[eq.code], ...eq })), ...kept];
+    const merged = [
+      ...registryPreview.sheetEquip.map((eq) => ({
+        ...currentByCode[eq.code],
+        ...eq,
+        contractor: eq.contractor || currentByCode[eq.code]?.contractor || "",
+      })),
+      ...kept,
+    ];
     saveEquipmentRegistry(merged);
     onRegistryChange?.(merged);
     setRegistryResult({ applied: true, total: merged.length });
