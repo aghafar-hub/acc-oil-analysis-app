@@ -124,10 +124,14 @@ export default function Reports({ actions, oilChanges, equipmentRegistry, tracke
   const trackerByEquip = useMemo(() => parseTrackerRows(trackerRaw), [trackerRaw]);
 
   function actionCounts(contractor) {
-    let unresolved = (actions || []).filter((a) => FOCUS_STATUSES.includes(a.status));
+    let active = (actions || []).filter((a) => FOCUS_STATUSES.includes(a.status));
     const contractorOf = (a) => a.contractor || registryByCode[a.equipmentCode]?.contractor || "Unassigned";
-    if (contractor !== ALL) unresolved = unresolved.filter((a) => contractorOf(a) === contractor);
-    return { unresolved: unresolved.length, waiting: unresolved.filter((a) => a.status === "Waiting Stoppage").length };
+    if (contractor !== ALL) active = active.filter((a) => contractorOf(a) === contractor);
+    return {
+      open: active.filter((a) => a.status === "Open").length,
+      inProgress: active.filter((a) => a.status === "In Progress").length,
+      waiting: active.filter((a) => a.status === "Waiting Stoppage").length,
+    };
   }
 
   function oilChangeCounts(contractor) {
@@ -160,7 +164,7 @@ export default function Reports({ actions, oilChanges, equipmentRegistry, tracke
     const a = actionCounts(combinedContractor);
     const oc = oilChangeCounts(combinedContractor);
     const sm = sampleCounts(combinedContractor);
-    return { unresolved: a.unresolved, overdueOil: oc.overdue, flaggedSamples: sm.missing + sm.overdue };
+    return { openActions: a.open + a.inProgress + a.waiting, overdueOil: oc.overdue, flaggedSamples: sm.missing + sm.overdue };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [actions, oilChanges, trackerByEquip, equipmentRegistry, combinedContractor]);
 
@@ -198,7 +202,8 @@ export default function Reports({ actions, oilChanges, equipmentRegistry, tracke
           onContractorChange={setActionContractor}
           contractorList={contractorList}
           stats={[
-            { value: actionPreview.unresolved, label: "Unresolved", color: "danger" },
+            { value: actionPreview.open, label: "Open", color: "danger" },
+            { value: actionPreview.inProgress, label: "In Progress", color: "warning" },
             { value: actionPreview.waiting, label: "Waiting Stoppage", color: "accent" },
           ]}
           busy={generating === "action"}
@@ -252,7 +257,7 @@ export default function Reports({ actions, oilChanges, equipmentRegistry, tracke
           onContractorChange={setCombinedContractor}
           contractorList={contractorList}
           stats={[
-            { value: combinedPreview.unresolved, label: "Unresolved Actions", color: "danger" },
+            { value: combinedPreview.openActions, label: "Open + Waiting Actions", color: "danger" },
             { value: combinedPreview.overdueOil, label: "Overdue Oil", color: "warning" },
             { value: combinedPreview.flaggedSamples, label: "Flagged Samples", color: "accent" },
           ]}

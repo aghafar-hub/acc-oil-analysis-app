@@ -216,25 +216,175 @@ function contractorsFromRegistry(equipmentRegistry) {
   return Array.from(new Set((equipmentRegistry || []).map((r) => r.contractor).filter(Boolean)));
 }
 
+// ── Simple hand-drawn charts ─────────────────────────────────────────────
+// No charting library — same spirit as the app's own hand-rolled SVG donut
+// math (Dashboard, Action Tracker), just emitting jsPDF drawing calls
+// instead of an SVG path string.
+
+// Converts an absolute point list into jsPDF's lines() relative-segment
+// format and fills it as one closed polygon.
+function fillPolygon(doc, points, style = "F") {
+  if (points.length < 3) return;
+  const segs = [];
+  for (let i = 1; i < points.length; i++) {
+    segs.push([points[i][0] - points[i - 1][0], points[i][1] - points[i - 1][1]]);
+  }
+  doc.lines(segs, points[0][0], points[0][1], [1, 1], style, true);
+}
+
+// slices: [{ value, color }]. Draws each slice as a filled wedge from the
+// center, then (for a donut) punches a white hole in the middle — the same
+// trick the React donuts use with an overlaid background-color circle.
+function drawDonut(doc, { cx, cy, radius, holeRadius = 0, slices }) {
+  const total = slices.reduce((s, sl) => s + sl.value, 0);
+  if (total <= 0) {
+    doc.setDrawColor(...BRAND.border);
+    doc.setLineWidth(1);
+    doc.circle(cx, cy, radius, "S");
+    return;
+  }
+  let angle = -Math.PI / 2;
+  slices.forEach((sl) => {
+    if (sl.value <= 0) return;
+    const sweep = (sl.value / total) * 2 * Math.PI;
+    const steps = Math.max(2, Math.ceil(sweep / (Math.PI / 24)));
+    const points = [[cx, cy]];
+    for (let i = 0; i <= steps; i++) {
+      const a = angle + sweep * (i / steps);
+      points.push([cx + radius * Math.cos(a), cy + radius * Math.sin(a)]);
+    }
+    doc.setFillColor(...sl.color);
+    fillPolygon(doc, points, "F");
+    angle += sweep;
+  });
+  if (holeRadius > 0) {
+    doc.setFillColor(255, 255, 255);
+    doc.circle(cx, cy, holeRadius, "F");
+  }
+}
+
+// A donut plus a text legend to its right — color swatch, value, label.
+function donutWithLegend(doc, { x, y, radius, slices, legendX }) {
+  const cy = y + radius;
+  drawDonut(doc, { cx: x + radius, cy, radius, holeRadius: radius * 0.55, slices });
+  let ly = y + 6;
+  slices.forEach((sl) => {
+    doc.setFillColor(...sl.color);
+    doc.roundedRect(legendX, ly - 8, 9, 9, 2, 2, "F");
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(9);
+    doc.setTextColor(...sl.color);
+    doc.text(String(sl.value), legendX + 14, ly);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8.5);
+    doc.setTextColor(...BRAND.muted);
+    doc.text(sl.label, legendX + 34, ly);
+    ly += 20;
+  });
+  doc.setTextColor(20, 26, 33);
+  return y + radius * 2 + 16;
+}
+
+// One horizontal bar per row, all scaled against a shared max so rows
+// (e.g. one per contractor) can be compared at a glance.
+function horizontalBars(doc, { x, y, width, rows, maxValue, barHeight = 14, gap = 10, valueFormatter, labelWidth = 60 }) {
+  const max = maxValue != null ? maxValue : Math.max(1, ...rows.map((r) => r.value));
+  const barX = x + labelWidth;
+  const barW = width - labelWidth - 40;
+  rows.forEach((r, i) => {
+    const ry = y + i * (barHeight + gap);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(8);
+    doc.setTextColor(...BRAND.navy);
+    doc.text(r.label, x, ry + barHeight - 3, { maxWidth: labelWidth - 6 });
+    doc.setFillColor(...BRAND.border);
+    doc.roundedRect(barX, ry, barW, barHeight, 3, 3, "F");
+    const filledW = r.value > 0 ? Math.max(barW * 0.02, (r.value / max) * barW) : 0;
+    if (filledW > 0) {
+      doc.setFillColor(...(r.color || BRAND.teal));
+      doc.roundedRect(barX, ry, filledW, barHeight, 3, 3, "F");
+    }
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(8.5);
+    doc.setTextColor(...(r.color || BRAND.teal));
+    doc.text(valueFormatter ? valueFormatter(r.value) : String(r.value), barX + barW + 6, ry + barHeight - 3);
+  });
+  doc.setTextColor(20, 26, 33);
+  return y + rows.length * (barHeight + gap);
+}
+
+// Stacked bar per row (e.g. one contractor's Open / In Progress / Waiting
+// Stoppage split), each row's total bar length scaled against the largest
+// row total so contractor workloads stay comparable.
+function stackedBars(doc, { x, y, width, rows, barHeight = 16, gap = 12, labelWidth = 60 }) {
+  const max = Math.max(1, ...rows.map((r) => r.segments.reduce((s, sg) => s + sg.value, 0)));
+  const barX = x + labelWidth;
+  const barW = width - labelWidth - 46;
+  rows.forEach((r, i) => {
+    const ry = y + i * (barHeight + gap);
+    const total = r.segments.reduce((s, sg) => s + sg.value, 0);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(8);
+    doc.setTextColor(...BRAND.navy);
+    doc.text(r.label, x, ry + barHeight - 4, { maxWidth: labelWidth - 6 });
+    doc.setFillColor(...BRAND.border);
+    doc.roundedRect(barX, ry, barW, barHeight, 3, 3, "F");
+    const scaledTotalW = (total / max) * barW;
+    let segX = barX;
+    if (total > 0) {
+      r.segments.forEach((sg) => {
+        if (sg.value <= 0) return;
+        const segW = (sg.value / total) * scaledTotalW;
+        doc.setFillColor(...sg.color);
+        doc.rect(segX, ry, segW, barHeight, "F");
+        segX += segW;
+      });
+    }
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(8.5);
+    doc.setTextColor(...BRAND.navy);
+    doc.text(String(total), barX + barW + 6, ry + barHeight - 4);
+  });
+  doc.setTextColor(20, 26, 33);
+  return y + rows.length * (barHeight + gap);
+}
+
+// Small color-swatch + label row used above a chart to explain its colors.
+function chartLegend(doc, items, x, y) {
+  let lx = x;
+  items.forEach((it) => {
+    doc.setFillColor(...it.color);
+    doc.roundedRect(lx, y - 7, 8, 8, 2, 2, "F");
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    doc.setTextColor(...BRAND.muted);
+    doc.text(it.label, lx + 12, y);
+    lx += 12 + doc.getTextWidth(it.label) + 18;
+  });
+  doc.setTextColor(20, 26, 33);
+  return y + 16;
+}
+
 // ── Section 1: Contractor Action Status ─────────────────────────────────
-// Focused on the three unresolved statuses — Open, In Progress, Waiting
+// Focused on the three active statuses — Open, In Progress, Waiting
 // Stoppage — since Closed actions are history, not something a contractor
 // needs to act on.
 const FOCUS_STATUSES = ["Open", "In Progress", "Waiting Stoppage"];
 
 function buildActionSection(doc, { actions, equipmentRegistry, contractor = "All" }, y) {
+  const pageWidth = doc.internal.pageSize.getWidth();
   const registryByCode = {};
   (equipmentRegistry || []).forEach((r) => (registryByCode[r.code] = r));
   const contractorOf = (a) => a.contractor || registryByCode[a.equipmentCode]?.contractor || "Unassigned";
 
-  let unresolved = (actions || []).filter((a) => FOCUS_STATUSES.includes(a.status));
-  if (contractor !== "All") unresolved = unresolved.filter((a) => contractorOf(a) === contractor);
+  let active = (actions || []).filter((a) => FOCUS_STATUSES.includes(a.status));
+  if (contractor !== "All") active = active.filter((a) => contractorOf(a) === contractor);
 
   const byContractor = {};
-  unresolved.forEach((a) => (byContractor[contractorOf(a)] ||= []).push(a));
+  active.forEach((a) => (byContractor[contractorOf(a)] ||= []).push(a));
   const contractors = Object.keys(byContractor).sort((a, b) => byContractor[b].length - byContractor[a].length);
 
-  const oldestOverall = unresolved.reduce((m, a) => Math.max(m, daysSince(a.revisionDate) ?? 0), 0);
+  const oldestOverall = active.reduce((m, a) => Math.max(m, daysSince(a.revisionDate) ?? 0), 0);
   const narrative =
     contractor === "All"
       ? `This report covers every Open, In Progress, and Waiting Stoppage action across all contractors as of ${formatDate(new Date().toISOString())}. Closed actions are excluded — they no longer need contractor attention.`
@@ -244,17 +394,44 @@ function buildActionSection(doc, { actions, equipmentRegistry, contractor = "All
   y = statStrip(
     doc,
     [
-      { value: unresolved.length, label: "TOTAL UNRESOLVED", color: BRAND.navy },
-      { value: unresolved.filter((a) => a.status === "Open").length, label: "OPEN", color: BRAND.danger },
-      { value: unresolved.filter((a) => a.status === "In Progress").length, label: "IN PROGRESS", color: BRAND.warning },
-      { value: unresolved.filter((a) => a.status === "Waiting Stoppage").length, label: "WAITING STOPPAGE", color: BRAND.accent },
+      { value: active.length, label: "TOTAL ACTIONS", color: BRAND.navy },
+      { value: active.filter((a) => a.status === "Open").length, label: "OPEN", color: BRAND.danger },
+      { value: active.filter((a) => a.status === "In Progress").length, label: "IN PROGRESS", color: BRAND.warning },
+      { value: active.filter((a) => a.status === "Waiting Stoppage").length, label: "WAITING STOPPAGE", color: BRAND.accent },
       { value: `${oldestOverall}d`, label: "OLDEST OPEN", color: BRAND.navy },
     ],
     y
   );
-  y += 12;
+  y += 14;
+
+  if (contractors.length > 0) {
+    const chartRows = contractors.map((c) => ({
+      label: c,
+      segments: [
+        { value: byContractor[c].filter((a) => a.status === "Open").length, color: BRAND.danger },
+        { value: byContractor[c].filter((a) => a.status === "In Progress").length, color: BRAND.warning },
+        { value: byContractor[c].filter((a) => a.status === "Waiting Stoppage").length, color: BRAND.accent },
+      ],
+    }));
+    y = needsNewPage(doc, y, chartRows.length * 28 + 60);
+    y = sectionTitle(doc, "Actions by Contractor", y);
+    y = chartLegend(
+      doc,
+      [
+        { label: "Open", color: BRAND.danger },
+        { label: "In Progress", color: BRAND.warning },
+        { label: "Waiting Stoppage", color: BRAND.accent },
+      ],
+      36,
+      y
+    );
+    y += 4;
+    y = stackedBars(doc, { x: 36, y, width: pageWidth - 72, rows: chartRows });
+    y += 18;
+  }
 
   if (contractor === "All") {
+    y = needsNewPage(doc, y, 100);
     y = sectionTitle(doc, "Summary by Contractor", y);
     const summaryRows = contractors.map((c) => {
       const list = byContractor[c];
@@ -270,8 +447,8 @@ function buildActionSection(doc, { actions, equipmentRegistry, contractor = "All
     });
     autoTable(doc, {
       startY: y,
-      head: [["Contractor", "Open", "In Progress", "Waiting Stoppage", "Total Unresolved", "Oldest Open"]],
-      body: summaryRows.length ? summaryRows : [["No unresolved actions right now", "", "", "", "", ""]],
+      head: [["Contractor", "Open", "In Progress", "Waiting Stoppage", "Total", "Oldest Open"]],
+      body: summaryRows.length ? summaryRows : [["No active actions right now", "", "", "", "", ""]],
       theme: "grid",
       headStyles: { fillColor: BRAND.navy, textColor: 255, fontSize: 9 },
       styles: { fontSize: 9, cellPadding: 5, lineColor: BRAND.border, lineWidth: 0.5 },
@@ -283,7 +460,13 @@ function buildActionSection(doc, { actions, equipmentRegistry, contractor = "All
   const detailHead = ["Ac. No", "Equipment", "Description", "Oil Type", "Status", "Days Open", "Contractor Action", "Agreed Action"];
   contractors.forEach((c) => {
     y = needsNewPage(doc, y, 130);
-    y = sectionTitle(doc, contractor === "All" ? `${c} — ${byContractor[c].length} unresolved` : "Unresolved Actions", y);
+    y = sectionTitle(
+      doc,
+      contractor === "All"
+        ? `${c} — ${byContractor[c].length} action${byContractor[c].length === 1 ? "" : "s"}`
+        : "Open / In Progress / Waiting Stoppage Actions",
+      y
+    );
     const rows = [...byContractor[c]]
       .sort((a, b) => (daysSince(b.revisionDate) ?? 0) - (daysSince(a.revisionDate) ?? 0))
       .map((a) => [
@@ -338,6 +521,7 @@ export async function generateContractorActionReport({ actions, equipmentRegistr
 // Contractor Performance card, plus a dedicated overdue-equipment table
 // sorted most overdue first.
 function buildOilChangeSection(doc, { oilChanges, equipmentRegistry, actions, contractor = "All" }, y) {
+  const pageWidth = doc.internal.pageSize.getWidth();
   const registryByCode = {};
   (equipmentRegistry || []).forEach((r) => (registryByCode[r.code] = r));
   const allContractors = contractorsFromRegistry(equipmentRegistry);
@@ -388,8 +572,35 @@ function buildOilChangeSection(doc, { oilChanges, equipmentRegistry, actions, co
     ],
     y
   );
-  y += 12;
+  y += 14;
 
+  if (stats.length > 0) {
+    y = needsNewPage(doc, y, stats.length * 24 * 2 + 100);
+    y = sectionTitle(doc, "On-Time Oil Changes %", y);
+    y = horizontalBars(doc, {
+      x: 36,
+      y,
+      width: pageWidth - 72,
+      rows: stats.map((s) => ({ label: s.name, value: s.onTimePct ?? 0, color: BRAND.teal })),
+      maxValue: 100,
+      valueFormatter: (v) => `${v}%`,
+    });
+    y += 18;
+
+    y = needsNewPage(doc, y, stats.length * 24 + 60);
+    y = sectionTitle(doc, "Action Closure %", y);
+    y = horizontalBars(doc, {
+      x: 36,
+      y,
+      width: pageWidth - 72,
+      rows: stats.map((s) => ({ label: s.name, value: s.closureRatePct ?? 0, color: BRAND.accent })),
+      maxValue: 100,
+      valueFormatter: (v) => `${v}%`,
+    });
+    y += 18;
+  }
+
+  y = needsNewPage(doc, y, 100);
   y = sectionTitle(doc, "Contractor Performance", y);
   autoTable(doc, {
     startY: y,
@@ -504,7 +715,25 @@ function buildSampleSection(doc, { trackerRaw, equipmentRegistry, contractor = "
     ],
     y
   );
-  y += 12;
+  y += 14;
+
+  if (registry.length > 0) {
+    y = needsNewPage(doc, y, 150);
+    y = sectionTitle(doc, "Sample Status Distribution", y);
+    const donutY = y;
+    y = donutWithLegend(doc, {
+      x: 36,
+      y: donutY,
+      radius: 40,
+      slices: [
+        { value: counts.OK, label: "OK", color: BRAND.success },
+        { value: counts.OVERDUE, label: "Overdue", color: BRAND.warning },
+        { value: counts.MISSING, label: "Missing", color: BRAND.danger },
+      ],
+      legendX: 36 + 40 * 2 + 24,
+    });
+    y += 4;
+  }
 
   y = needsNewPage(doc, y, 130);
   y = sectionTitle(doc, `Overdue / Missing Samples — ${flagged.length}`, y);
