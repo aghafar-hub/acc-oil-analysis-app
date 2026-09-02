@@ -3,40 +3,64 @@ import { useTheme } from "../ThemeContext";
 import { generateContractorActionReport, generateOilChangeContractorReport } from "../reportGenerators";
 
 const FOCUS_STATUSES = ["Open", "In Progress", "Waiting Stoppage"];
+// Must match the "All" sentinel the report generators default to.
+const ALL = "All";
 
 // Two well-designed, downloadable PDF reports built straight from the data
-// already loaded in the app — no server round trip. Each card shows a live
-// preview of what the report will contain before it's generated.
+// already loaded in the app — no server round trip. Each card lets you
+// scope the report to one contractor (or all of them) and shows a live
+// preview of what will be in the PDF before it's generated.
 export default function Reports({ actions, oilChanges, equipmentRegistry }) {
   const { T, s } = useTheme();
   const [generating, setGenerating] = useState(null); // "action" | "oilchange" | null
+  const [actionContractor, setActionContractor] = useState(ALL);
+  const [oilChangeContractor, setOilChangeContractor] = useState(ALL);
+
+  const registryByCode = useMemo(() => {
+    const map = {};
+    (equipmentRegistry || []).forEach((r) => (map[r.code] = r));
+    return map;
+  }, [equipmentRegistry]);
+
+  const contractorList = useMemo(
+    () => [ALL, ...Array.from(new Set((equipmentRegistry || []).map((r) => r.contractor).filter(Boolean))).sort()],
+    [equipmentRegistry]
+  );
 
   const actionPreview = useMemo(() => {
-    const unresolved = (actions || []).filter((a) => FOCUS_STATUSES.includes(a.status));
-    const registryByCode = {};
-    (equipmentRegistry || []).forEach((r) => (registryByCode[r.code] = r));
-    const contractors = new Set(unresolved.map((a) => a.contractor || registryByCode[a.equipmentCode]?.contractor || "Unassigned"));
+    let unresolved = (actions || []).filter((a) => FOCUS_STATUSES.includes(a.status));
+    const contractorOf = (a) => a.contractor || registryByCode[a.equipmentCode]?.contractor || "Unassigned";
+    if (actionContractor !== ALL) unresolved = unresolved.filter((a) => contractorOf(a) === actionContractor);
+    const contractors = new Set(unresolved.map(contractorOf));
     return {
       unresolved: unresolved.length,
-      open: unresolved.filter((a) => a.status === "Open").length,
-      inProgress: unresolved.filter((a) => a.status === "In Progress").length,
       waiting: unresolved.filter((a) => a.status === "Waiting Stoppage").length,
       contractors: contractors.size,
     };
-  }, [actions, equipmentRegistry]);
+  }, [actions, registryByCode, actionContractor]);
 
   const oilChangePreview = useMemo(() => {
-    const contractors = new Set((equipmentRegistry || []).map((r) => r.contractor).filter(Boolean));
-    const overdue = (oilChanges || []).filter((o) => o.status === "Overdue");
-    return { contractors: contractors.size, overdue: overdue.length, totalPoints: (oilChanges || []).length };
-  }, [oilChanges, equipmentRegistry]);
+    const codes =
+      oilChangeContractor === ALL
+        ? null
+        : new Set((equipmentRegistry || []).filter((r) => r.contractor === oilChangeContractor).map((r) => r.code));
+    const points = codes ? (oilChanges || []).filter((o) => codes.has(o.equipmentCode)) : oilChanges || [];
+    const contractors =
+      oilChangeContractor === ALL
+        ? new Set((equipmentRegistry || []).map((r) => r.contractor).filter(Boolean))
+        : new Set([oilChangeContractor]);
+    return {
+      contractors: contractors.size,
+      overdue: points.filter((o) => o.status === "Overdue").length,
+      totalPoints: points.length,
+    };
+  }, [oilChanges, equipmentRegistry, oilChangeContractor]);
 
   async function handleGenerate(kind) {
     setGenerating(kind);
     try {
-      await new Promise((r) => setTimeout(r, 50)); // let the button repaint before the (synchronous) PDF build
-      if (kind === "action") generateContractorActionReport({ actions, equipmentRegistry });
-      else generateOilChangeContractorReport({ oilChanges, equipmentRegistry, actions });
+      if (kind === "action") await generateContractorActionReport({ actions, equipmentRegistry, contractor: actionContractor });
+      else await generateOilChangeContractorReport({ oilChanges, equipmentRegistry, actions, contractor: oilChangeContractor });
     } finally {
       setGenerating(null);
     }
@@ -52,15 +76,36 @@ export default function Reports({ actions, oilChanges, equipmentRegistry }) {
       <div style={{ fontSize: 10, color: T.textSecondary, marginTop: 2 }}>{label}</div>
     </div>
   );
+  const contractorPicker = (selected, onSelect) => (
+    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+      {contractorList.map((c) => (
+        <button
+          key={c}
+          onClick={() => onSelect(c)}
+          style={{
+            ...s.btn,
+            fontSize: 11.5,
+            padding: "5px 11px",
+            background: selected === c ? T.accent : "transparent",
+            color: selected === c ? T.accentText : T.textSecondary,
+            borderColor: selected === c ? T.accent : T.border,
+          }}
+        >
+          {c === ALL ? "All Contractors" : c}
+        </button>
+      ))}
+    </div>
+  );
 
   return (
     <div>
       <p style={{ ...s.sectionTitle, margin: "0 0 6px" }}>Reports</p>
       <p style={{ fontSize: 13, color: T.textSecondary, margin: "0 0 20px" }}>
-        Generate a clean, printable PDF straight from current data — nothing is saved or sent anywhere.
+        Generate a clean, printable PDF straight from current data — nothing is saved or sent anywhere. Choose one contractor or all of them
+        before generating.
       </p>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(320px,1fr))", gap: 16 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(340px,1fr))", gap: 16 }}>
         <div style={cardStyle}>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <div
@@ -80,14 +125,21 @@ export default function Reports({ actions, oilChanges, equipmentRegistry }) {
             </div>
             <div>
               <div style={{ fontSize: 14, fontWeight: 700, color: T.textPrimary }}>Contractor Action Status</div>
-              <div style={{ fontSize: 11.5, color: T.textSecondary }}>Open · In Progress · Waiting Stoppage, grouped by contractor</div>
+              <div style={{ fontSize: 11.5, color: T.textSecondary }}>Open · In Progress · Waiting Stoppage</div>
             </div>
+          </div>
+
+          <div>
+            <div style={{ fontSize: 10.5, fontWeight: 700, color: T.textMuted, textTransform: "uppercase", marginBottom: 6 }}>
+              Contractor
+            </div>
+            {contractorPicker(actionContractor, setActionContractor)}
           </div>
 
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             {statBox(actionPreview.unresolved, "Unresolved", T.danger)}
-            {statBox(actionPreview.contractors, "Contractors")}
             {statBox(actionPreview.waiting, "Waiting Stoppage", T.accent)}
+            {actionContractor === ALL && statBox(actionPreview.contractors, "Contractors")}
           </div>
 
           <button
@@ -119,16 +171,21 @@ export default function Reports({ actions, oilChanges, equipmentRegistry }) {
             </div>
             <div>
               <div style={{ fontSize: 14, fontWeight: 700, color: T.textPrimary }}>Oil Change Contractor Performance</div>
-              <div style={{ fontSize: 11.5, color: T.textSecondary }}>
-                On-time % and closure rate per contractor, plus overdue equipment
-              </div>
+              <div style={{ fontSize: 11.5, color: T.textSecondary }}>On-time % and closure rate, plus overdue equipment</div>
             </div>
+          </div>
+
+          <div>
+            <div style={{ fontSize: 10.5, fontWeight: 700, color: T.textMuted, textTransform: "uppercase", marginBottom: 6 }}>
+              Contractor
+            </div>
+            {contractorPicker(oilChangeContractor, setOilChangeContractor)}
           </div>
 
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             {statBox(oilChangePreview.overdue, "Overdue Points", T.danger)}
-            {statBox(oilChangePreview.contractors, "Contractors")}
             {statBox(oilChangePreview.totalPoints, "Total Points")}
+            {oilChangeContractor === ALL && statBox(oilChangePreview.contractors, "Contractors")}
           </div>
 
           <button
