@@ -64,8 +64,13 @@ function splitTrackerCell(value) {
 
 // rows: raw 2D array from the "Oil Sample Tracker" sheet, header row
 // included (rows[0] = ["Equipment", "Last sample", "interval Days",
-// "INTERVAL", "Jul-22", "Aug-22", ...]). Returns { [equipmentCode]: [{
-// monthLabel, status, date, sortDate }] } sorted newest month first.
+// "INTERVAL", <month columns>, ...]). Month columns can be plain text
+// ("Jul-22") or real Date-typed cells (Apps Script serializes those to ISO
+// strings) — either way a column only counts as a month if its header
+// actually parses as one, which is also what excludes the leading "Last
+// sample" / "interval Days" / "INTERVAL" metadata columns without having to
+// hard-code their positions. Returns { [equipmentCode]: [{ monthLabel,
+// status, date, sortDate }] } sorted newest month first.
 export function parseTrackerRows(rows) {
   if (!rows || rows.length < 2) return {};
   const header = rows[0];
@@ -76,18 +81,20 @@ export function parseTrackerRows(rows) {
     if (!code) continue;
     const entries = [];
     for (let c = 1; c < header.length; c++) {
-      const monthLabel = String(header[c] || "").trim();
-      if (!monthLabel) continue;
+      const rawHeader = String(header[c] || "").trim();
+      if (!rawHeader) continue;
+      const monthDate = parseMonthLabelDate(rawHeader);
+      if (!monthDate) continue;
+      const monthLabel = monthDate.toLocaleDateString("en-GB", { month: "short", year: "numeric" });
       const cell = String(row[c] || "").trim();
       if (!cell) continue;
       const { status, date: rawDate } = splitTrackerCell(cell);
-      const monthDate = parseMonthLabelDate(monthLabel);
       let date = rawDate;
       if (rawDate && rawDate !== monthLabel) {
         const parsed = parseMonthLabelDate(rawDate) || new Date(rawDate);
         if (!isNaN(parsed)) date = parsed.toLocaleDateString("en-GB", { month: "short", year: "numeric" });
       }
-      entries.push({ monthLabel, status, date: date || monthLabel, sortDate: monthDate ? monthDate.getTime() : 0 });
+      entries.push({ monthLabel, status, date: date || monthLabel, sortDate: monthDate.getTime() });
     }
     entries.sort((a, b) => b.sortDate - a.sortDate);
     result[code] = entries;
@@ -153,6 +160,17 @@ export function sampleTriggerReadings(sm) {
   );
 }
 
+// Equipment flips from OVERDUE (amber) to MISSING (red) once it's this many
+// months past its interval, rather than by a day count — the sheet only
+// tracks samples to month granularity now, so freshness is judged the same
+// way.
+const OVERDUE_GRACE_MONTHS = 1.5;
+
+function formatMonths(months) {
+  const rounded = Math.round(Math.abs(months) * 10) / 10;
+  return `${rounded} ${rounded === 1 ? "month" : "months"}`;
+}
+
 // Computes { label: "OK"|"OVERDUE"|"MISSING", daysInfo } for one equipment,
 // given its most recent sample/tracker date and its registry interval.
 export function sampleTrackerStatus(lastDateStr, intervalText) {
@@ -162,12 +180,11 @@ export function sampleTrackerStatus(lastDateStr, intervalText) {
   if (!lastDateStr) return { label: "MISSING", daysInfo: "No sample recorded" };
   const last = new Date(lastDateStr);
   if (isNaN(last)) return { label: "MISSING", daysInfo: "Invalid date" };
-  const intervalDays = months * 30.44;
-  const ageDays = (Date.now() - last.getTime()) / 86400000;
-  const remaining = Math.round(intervalDays - ageDays);
-  if (ageDays <= intervalDays) return { label: "OK", daysInfo: `${Math.abs(remaining)}d remaining` };
-  if (ageDays <= intervalDays + 15) return { label: "OVERDUE", daysInfo: `${Math.round(ageDays - intervalDays)}d overdue` };
-  return { label: "MISSING", daysInfo: `${Math.round(ageDays - intervalDays)}d missing` };
+  const ageMonths = (Date.now() - last.getTime()) / 86400000 / 30.44;
+  const remaining = months - ageMonths;
+  if (ageMonths <= months) return { label: "OK", daysInfo: `${formatMonths(remaining)} remaining` };
+  if (ageMonths <= months + OVERDUE_GRACE_MONTHS) return { label: "OVERDUE", daysInfo: `${formatMonths(ageMonths - months)} overdue` };
+  return { label: "MISSING", daysInfo: `${formatMonths(ageMonths - months)} missing` };
 }
 
 // ── Action Tracker ───────────────────────────────────────────────────────

@@ -99,7 +99,7 @@ export const HOWTO_TOPICS = [
     steps: [
       {
         title: "Status Alarms",
-        desc: "Each equipment shows one of three statuses based on its sampling interval (from Equipment Registry) and the date of its last sample: OK (within interval), OVERDUE (up to 15 days late), MISSING (more than 15 days past due — red alarm).",
+        desc: "Each equipment shows one of three statuses based on its sampling interval (from Equipment Registry) and the date of its last sample: OK (within interval), OVERDUE (up to 1.5 months late), MISSING (more than 1.5 months past due — red alarm).",
       },
       {
         title: "Monthly Timeline",
