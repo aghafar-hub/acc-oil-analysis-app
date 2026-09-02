@@ -775,7 +775,7 @@ export async function generateSampleOverdueReport({ trackerByEquip, equipmentReg
 
 // ── Combined report: all three sections in one PDF ──────────────────────
 export async function generateCombinedReport({ actions, oilChanges, equipmentRegistry, trackerByEquip, contractor = "All" }) {
-  const doc = await newDoc("Combined Maintenance Report", scopeLineFor(contractor));
+  const doc = await newDoc("Oil Analysis Report", scopeLineFor(contractor));
   let y = 98;
 
   y = bigSectionHeader(doc, "1. Contractor Action Status", y);
