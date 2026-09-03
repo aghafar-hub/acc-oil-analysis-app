@@ -30,11 +30,20 @@ failing build will show a red check.
 npm run build
 ```
 
-Outputs a static site to `dist/` — an `index.html` plus a hashed JS bundle
-in `dist/assets/`. This is a fully static site; it can be hosted anywhere
-that serves static files (GitHub Pages, Netlify, S3 + CloudFront, an
-internal web server, etc.). There is no server-side code to deploy — all
-data access happens client-side against the Apps Script webhook.
+Outputs a static site to `dist/` — an `index.html`, a hashed JS bundle in
+`dist/assets/`, and a separate `pdf.worker.min-*.mjs` chunk (`pdfjs-dist`'s
+web worker, used by the bulk PDF import feature — see
+[PDF_IMPORT.md](./PDF_IMPORT.md)), loaded via Vite's `?url` import so it
+gets its own hashed output file rather than being inlined. This is a fully
+static site; it can be hosted anywhere that serves static files (GitHub
+Pages, Netlify, S3 + CloudFront, an internal web server, etc.). There is no
+server-side code to deploy — all data access happens client-side against
+the Apps Script webhook, and all PDF parsing happens client-side too, with
+no network call at all.
+
+`pdfjs-dist` is deliberately pinned to `^4.10.38`, not the latest major —
+see [PDF_IMPORT.md](./PDF_IMPORT.md#why-this-is-entirely-client-side)
+before bumping it.
 
 ### Base path
 

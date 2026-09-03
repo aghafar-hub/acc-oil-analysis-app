@@ -151,9 +151,18 @@ export async function getEquipmentRegistry(webhookUrl) {
 
 // Column order confirmed straight from the deployed Apps Script's own
 // readEquipmentRegistry(): Code, Description, AssetID, AssetClass,
-// Lubricant, Interval, Manufacturer, Model, Area. There is no Contractor
-// column on this sheet — that field lives only in this app's own bundled
-// registry — so it's never read or written here.
+// Lubricant, Interval, Manufacturer, Model, Area. The sheet DOES also carry
+// a Contractor column (J) — readEquipmentRegistry() reads it (see
+// equipmentRegistry.js) — but this row-builder deliberately omits it: it
+// only backs updateEquipmentRegistryEntry(), used today to edit just the
+// sampling interval from Settings, and the Apps Script's updateRow appears
+// to size the write range to however many values are sent (matching how it
+// already special-cases Oil Change Log to only ever touch two columns) — so
+// sending a 9-value row here should leave column J alone rather than risk
+// clobbering it with a stale value from local state. Not verified against
+// the Apps Script source itself (it isn't part of this repo); if a future
+// change makes updateRow overwrite a fixed-width row instead, this would
+// need to send the real contractor value back through to avoid wiping it.
 function equipmentRegistryRow(eq) {
   return [
     eq.code || "",

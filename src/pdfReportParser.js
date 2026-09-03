@@ -10,10 +10,11 @@
 //   1. Grouping text items into rows by y-position.
 //   2. Taking the "Sample ID" row's item x-positions as the column anchors
 //      for that page (every report has one, and IDs are always present).
-//   3. For every other row, binning its items to the nearest anchor —
-//      alignment drifts a little row to row (numbers vs words, left- vs
-//      right-aligned), but never more than ~15pt, well under half the
-//      ~41pt column spacing, so nearest-anchor matching is reliable.
+//   3. For every other row, binning its items to a column by interval
+//      assignment (see binToColumns() below) — not by nearest-anchor
+//      distance, which mis-files real cells whose content spans nearly the
+//      full column width (an 11-digit Sample ID, a "04 Jun 2024" date's
+//      later tokens) into the neighboring column.
 // Cell background color (which conveys more than the numbers alone — a
 // single wear metal can be flagged even when the row's overall rating
 // isn't) is read by rendering the page to a canvas and sampling pixels at

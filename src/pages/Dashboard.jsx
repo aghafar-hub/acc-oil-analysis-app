@@ -79,19 +79,14 @@ export default function Dashboard({ samples, actions, oilChanges, equipmentRegis
   const areas = useMemo(() => ["All", ...Array.from(new Set(registry.map((e) => e.area).filter(Boolean)))], [registry]);
   const areaCodes = areaFilter === "All" ? null : new Set(registry.filter((e) => e.area === areaFilter).map((e) => e.code));
 
-  const contractors = useMemo(
-    () => ["All", ...Array.from(new Set(registry.map((e) => e.contractor).filter(Boolean)))],
-    [registry]
-  );
+  const contractors = useMemo(() => ["All", ...Array.from(new Set(registry.map((e) => e.contractor).filter(Boolean)))], [registry]);
   const contractorCodes =
     contractorFilter === "All" ? null : new Set(registry.filter((e) => e.contractor === contractorFilter).map((e) => e.code));
 
   // Both filters apply together (intersection) — e.g. "Kiln" area + "RHI"
   // contractor narrows to only equipment matching both.
   const scopeCodes =
-    areaCodes && contractorCodes
-      ? new Set([...areaCodes].filter((c) => contractorCodes.has(c)))
-      : areaCodes || contractorCodes || null;
+    areaCodes && contractorCodes ? new Set([...areaCodes].filter((c) => contractorCodes.has(c))) : areaCodes || contractorCodes || null;
 
   const scopedSamples = scopeCodes ? samples.filter((s2) => scopeCodes.has(s2.unitId)) : samples;
   const scopedActions = scopeCodes ? actions.filter((a) => scopeCodes.has(a.equipmentCode)) : actions;
